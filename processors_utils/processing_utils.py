@@ -53,7 +53,7 @@ class DatasetProcessor(Component):
             
             with open(self.dataset_path, mode='r') as opened_file:
                 if file_extension == '.txt':
-                    data = [''.join(opened_file.readlines()).strip('\n')]
+                    data = ''.join(opened_file.readlines()).strip('\n')  # TODO
                 elif file_extension == '.json':
                     data = json.load(opened_file)
                 else:
@@ -64,33 +64,63 @@ class DatasetProcessor(Component):
 
     def text_splitter(self, documents):
         divided_text = []
-        if type(documents) == dict:
-            return documents
-        elif type(documents) == list:
-            if self.split_type == 'sentence':
-                dividing_by_list = ['\n', '.']
-            elif self.split_type == 'paragraph':
-                dividing_by_list = ['\n']
+        cur_text_fragment_list = []
+        idx = 0
+        if self.split_type == 'paragraph':
+            for text_fragment in documents:
+                if len(text_fragment['passage'].split(' ')) > 2:
+                    cur_text_fragment_list.append(text_fragment['passage'].strip())
+                    if len(cur_text_fragment_list) == self.amount:
+                        divided_text.append({'idx': idx, 'passage': '\n'.join(cur_text_fragment_list)})
+                        cur_text_fragment_list = []
+                        idx += 1
+                else:
+                    print(f"WARNING! Fragment too short")
+        elif self.split_type == 'sentence':
+            text_sentences = []
+            for text_fragment in documents:
+                if len(text_fragment.split(' ')) > 2:
+                    text_sentences.extend(text_fragment['passage'].split('.'))
+            
+            cur_sentences_list = []
+            for sentence in text_sentences:
+                if len(sentence.split(' ')) > 2:
+                    cur_sentences_list.append(text_fragment['passage'].strip())
+                    if len(cur_sentences_list) == self.amount:
+                        divided_text.append({'idx': idx, 'passage': '\n'.join(cur_sentences_list)})
+                        cur_sentences_list = []
+                        idx += 1
+                else:
+                    print(f"WARNING! Fragment too short")
+        # if type(documents) == dict:
+        #     return documents
+        # elif type(documents) == list:
+            
 
-            for divider_char in dividing_by_list:
-                documents = [document.strip('\n').replace(divider_char, SPEC_STR) for document in documents]
+        #     if self.split_type == 'sentence':
+        #         dividing_by_list = ['\n', '.']
+        #     elif self.split_type == 'paragraph':
+        #         dividing_by_list = ['\n']
 
-            for document in documents:
-                divided_text.extend(document.split(SPEC_STR))
+        #     for divider_char in dividing_by_list:
+        #         documents = [document.strip('\n').replace(divider_char, SPEC_STR) for document in documents]
 
-            texts_list = []
+        #     for document in documents:
+        #         divided_text.extend(document.split(SPEC_STR))
 
-            index = 0
-            for text_fragment in divided_text:
-                if len(text_fragment) > 2:
-                    texts_list.append({"idx": index, "passage": text_fragment.strip()})
-                    index += 1
-            # texts_list = [ for ind, text_fragment in enumerate(divided_text)]
+        #     texts_list = []
 
-        else:
-            raise ValueError()
-        self.write_statistics(f"Splitted dataset length: {len(texts_list)}")
-        return texts_list
+        #     index = 0
+        #     for text_fragment in divided_text:
+        #         if len(text_fragment) > 2:
+        #             texts_list.append({"idx": index, "passage": text_fragment.strip()})
+        #             index += 1
+        #     # texts_list = [ for ind, text_fragment in enumerate(divided_text)]
+
+        # else:
+        #     raise ValueError()
+        self.write_statistics(f"Splitted dataset length: {len(divided_text)}")
+        return divided_text
 
     def write_result(self, processed_passages):
         writing_path = os.path.join(self.working_dir, self.output_file)
@@ -136,7 +166,7 @@ class BaseProcessor(Component):
         all_entities = self.remove_non_unique(all_entities, logs_dict, 'entities')
         all_triples = self.remove_non_unique(all_triples, logs_dict, 'triples')
 
-        print(f"{all_entities=}\n\n{all_triples=}")
+        # print(f"{all_entities=}\n\n{all_triples=}")
         logs_dict['Entities triples proporation'] = self.check_entities_triples_united(all_entities, all_triples)
         self.write_statistics(logs_dict)
         
@@ -144,26 +174,36 @@ class BaseProcessor(Component):
 
     def remove_non_unique(self, list_of_entities_or_triples, logs_dict, things_name):
         original_length = len(list_of_entities_or_triples)
+        # print(f"{list_of_entities_or_triples=}")
         filtered_list_of_entities_or_triples = list(set(list_of_entities_or_triples))
         new_length = len(filtered_list_of_entities_or_triples)
         logs_dict[f'After only unique {things_name} left'] = \
         f"Count is changed from {original_length} to {new_length}\n"
         return filtered_list_of_entities_or_triples
 
+    def check_one_triple(self, triple):
+        if len(triple) != 3: 
+            return False
+        for entity in triple:
+            if entity == '' or type(entity) != str: 
+                return False
+        
+        return True
+
     def filter_triples_by_integrity(self, triples):
         full_triples = []
         damaged_triples = []
-        # print(f"{triples=}")
+        if triples == "":
+            damaged_triples.append("")
+            return full_triples, damaged_triples
         for triple in triples['triples']:
-            if len(triple) != 3: 
+            is_full = self.check_one_triple(triple)
+            if is_full:
+                full_triples.append(triple)
+            else:
                 damaged_triples.append(triple)
-                continue
-            for entity in triple:
-                if entity == '' or type(entity) != str: 
-                    damaged_triples.append(triple)
-                    continue
-            
-            full_triples.append(triple)
+        # print(f"{full_triples=}")
+        # print(f"{damaged_triples=}")
         return full_triples, damaged_triples
 
     def filter_entities_by_integrity(self, entities):
