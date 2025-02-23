@@ -53,7 +53,10 @@ class DatasetProcessor(Component):
             
             with open(self.dataset_path, mode='r') as opened_file:
                 if file_extension == '.txt':
-                    data = ''.join(opened_file.readlines()).strip('\n')  # TODO
+                    # data = ''.join(opened_file.readlines()).strip('\n')  # TODO
+                    data = [{"idx": idx, "passage": text_paragraph} for idx, text_paragraph 
+                            in enumerate(opened_file.readlines())]
+
                 elif file_extension == '.json':
                     data = json.load(opened_file)
                 else:
