@@ -238,14 +238,27 @@ class BaseProcessor(Component):
                 f'this elements from triples are not presented in entities: {not_presented_in_entities_str}\n']
 
     def write_result(self, all_entities, all_triples):
-        entities_triples_list = [all_entities, all_triples]
-        for index, file_name in enumerate(self.output_files):
-            writing_path = os.path.join(self.working_dir, Path(file_name))
-            with open(writing_path, 'w', newline='') as file:
-                writer = csv.writer(file)
-                for element in entities_triples_list[index]:
-                    writer.writerow([element])
-            print('Processed triples and entities are saved to', writing_path)
+        entities_writing_path = os.path.join(self.working_dir, Path(self.output_files[0]))
+        with open(entities_writing_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            for element in all_entities:
+                writer.writerow([element])
+
+        triples_writing_path = os.path.join(self.working_dir, Path(self.output_files[1]))
+        with open(triples_writing_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            for triple in all_triples:
+                writer.writerow(triple)
+
+
+        # entities_triples_list = [all_entities, all_triples]
+        # for index, file_name in enumerate(self.output_files):
+        #     writing_path = os.path.join(self.working_dir, Path(file_name))
+        #     with open(writing_path, 'w', newline='') as file:
+        #         writer = csv.writer(file)
+        #         for element in entities_triples_list[index]:
+        #             writer.writerow([element])
+        print('Processed triples and entities are saved to ', self.working_dir)
 
 
 def add_embeddings_to_triples_linkage(all_triples, embedding_model):
