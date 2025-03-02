@@ -28,25 +28,25 @@ wwwwwwwwwwwwwwww
 STATE = {}
 
 
-query_prompt_one_shot_input = """Please extract all named entities from provided sentence.
-Do not answer with entities, which are not present in sentence
-Place the named entities in json, containing list of extracted entities.
+# query_prompt_one_shot_input = """Please extract all named entities from provided sentence.
+# Do not answer with entities, which are not present in sentence
+# Place the named entities in json, containing list of extracted entities.
 
-Sentence: 
-```
-Which magazine was started first Arthur's Magazine or First for Women
-```
-"""
-query_prompt_one_shot_output = """
-{"named_entities": ["magazine", "woman", "First for Women", "Arthur's Magazine"]}
-"""
+# Sentence: 
+# ```
+# Which magazine was started first Arthur's Magazine or First for Women
+# ```
+# """
+# query_prompt_one_shot_output = """
+# {"named_entities": ["magazine", "woman", "First for Women", "Arthur's Magazine"]}
+# """
 
-query_prompt_template = """
-Sentence: 
-```
-{}
-```
-"""
+# query_prompt_template = """
+# Sentence: 
+# ```
+# {}
+# ```
+# """
 
 
 def process_query(prompt):
@@ -83,16 +83,29 @@ def processing_phrases(phrase):
 
 def extract_query_entities(query):
     llm = STATE['llm']
-    query_ner_prompts = ChatPromptTemplate.from_messages([SystemMessage("You're a very effective entity extraction system."),
-                                                          HumanMessage(query_prompt_one_shot_input),
-                                                          AIMessage(query_prompt_one_shot_output),
-                                                          HumanMessage(query_prompt_template.format(query))])
-    query_ner_messages = query_ner_prompts.format_prompt()
-    # user_prompt = 'Question: ' + query + '\nThought: '
-    chat_completion = llm.invoke(query_ner_messages.to_messages(), temperature=0)
+
+    prompt_constructor = STATE['pipeline'].components[1].task_split_prompt_constructor
+    prompt = prompt_constructor.get_task_split_prompt(task="triple", split_type='sentence')
+    ner_messages = prompt.get_prompt().format_prompt(user_input=query, )
+
+    chat_completion = llm.invoke(ner_messages.to_messages(), temperature=0)
     response_content = chat_completion[4]['content']   # .content
     response_content = extract_json_dict(response_content)
-    assert 'named_entities' in response_content
+
+    if 'named_entities' not in response_content:
+        response_content = []
+    else:
+        response_content = response_content['named_entities']
+    
+    # query_ner_prompts = ChatPromptTemplate.from_messages([SystemMessage("You're a very effective entity extraction system."),
+    #                                                       HumanMessage(query_prompt_one_shot_input),
+    #                                                       AIMessage(query_prompt_one_shot_output),
+    #                                                       HumanMessage(query_prompt_template.format(query))])
+    # query_ner_messages = query_ner_prompts.format_prompt()
+    # # user_prompt = 'Question: ' + query + '\nThought: '
+    # chat_completion = llm.invoke(query_ner_messages.to_messages(), temperature=0)
+    # response_content = chat_completion[4]['content']   # .content
+    # response_content = extract_json_dict(response_content)
     response_content = str(response_content)
     query_ner_list = eval(response_content)['named_entities']
     query_ner_list = [processing_phrases(p) for p in query_ner_list]
