@@ -8,6 +8,7 @@ import shutil
 import os
 import re
 import json
+import time
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.prompts import HumanMessagePromptTemplate, ChatPromptTemplate
 
@@ -27,43 +28,31 @@ wwwwwwwwwwwwwwww
 STATE = {}
 
 
+query_prompt_one_shot_input = """Please extract all named entities from provided sentence.
+Do not answer with entities, which are not present in sentence
+Place the named entities in json, containing list of extracted entities.
 
-query_prompt_one_shot_input = """Please extract all named entities that are important for solving the questions below.
-Place the named entities in json format.
-
-Question: Which magazine was started first Arthur's Magazine or First for Women?
-
+Sentence: 
+```
+Which magazine was started first Arthur's Magazine or First for Women
+```
 """
 query_prompt_one_shot_output = """
-{"named_entities": ["First for Women", "Arthur's Magazine"]}
+{"named_entities": ["magazine", "woman", "First for Women", "Arthur's Magazine"]}
 """
 
 query_prompt_template = """
-Question: {}
-
+Sentence: 
+```
+{}
+```
 """
 
 
-def init_pipeline():
-    pass
-    # torch.set_default_device("cuda")
-    # model = AutoModelForCausalLM.from_pretrained("/media/hdd/models/text/phi-2/", torch_dtype="auto", trust_remote_code=True)
-    # tokenizer = AutoTokenizer.from_pretrained("/media/hdd/models/text/phi-2/", trust_remote_code=True)
-    # state['model'] = model
-    # state['tokenizer'] = tokenizer
-
-
 def process_query(prompt):
-    query_entities = extract_query_entities()
+    query_entities = extract_query_entities(prompt.strip('\n').replace('?',''))
+    print(f"{query_entities=}")
     
-
-# def process_file(fileobj):
-#     save_dir = STATE['working_dir']
-#     path = "/home/ubuntu/temps/" + os.path.basename(fileobj)
-#     shutil.copyfile(fileobj.name, save_dir)
-#     # now you can process the file at path as needed, e.g:
-#     # do_something_to_file(path)
-
 
 def extract_doc_info(doc_save_path):
     pipeline = STATE['pipeline']
@@ -72,7 +61,7 @@ def extract_doc_info(doc_save_path):
     pipeline.launch()
 
 
-def extract_json_dict(self, text):
+def extract_json_dict(text):
         pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\})*)*\})*)*\}'
         match = re.search(pattern, text)
 
@@ -108,10 +97,11 @@ def extract_query_entities(query):
     query_ner_list = eval(response_content)['named_entities']
     query_ner_list = [processing_phrases(p) for p in query_ner_list]
 
+    return query_ner_list
 
 
 def preprocess_file(text):
-    # state['input_image'] = input_image
+    start_time = time.time()
     save_dir = STATE['working_dir']
     graph_constructor = STATE['graph_constructor']
 
@@ -122,11 +112,10 @@ def preprocess_file(text):
         for text_fragment in processed_text_fragments:
             output_file.write(text_fragment)
             output_file.write('\n')
-    # shutil.copyfile(file.name, save_path)
     extract_doc_info(save_path)
     STATE['graph'] = graph_constructor()
-    
-    return "Complete"
+    end_time = time.time()
+    return f"Processing complete in {round(end_time-start_time, 2)} s"
 
 
 def main():

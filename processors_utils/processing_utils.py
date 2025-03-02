@@ -205,8 +205,6 @@ class BaseProcessor(Component):
                 full_triples.append(triple)
             else:
                 damaged_triples.append(triple)
-        # print(f"{full_triples=}")
-        # print(f"{damaged_triples=}")
         return full_triples, damaged_triples
 
     def filter_entities_by_integrity(self, entities):

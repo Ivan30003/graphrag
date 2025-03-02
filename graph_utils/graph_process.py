@@ -41,6 +41,8 @@ class GraphConstructor(Component):
         with open(reading_path, 'r') as file:
             csv_reader = csv.reader(file)
             for row in csv_reader:
+                for ind in range(len(row)):
+                    row[ind] = row[ind].lower()
                 data.append(row)
         return data
     

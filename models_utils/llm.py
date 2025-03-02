@@ -63,8 +63,8 @@ class LLM:
         self.messages[2]['content'] = ai_message
         self.messages[3]['content'] = message
 
-        # print(f"\n\n{'*'*50}\nSystem: {system_message}\nUser: {human_message}\nAI: {ai_message}\nUser: {message}")
+        print(f"\n\n{'*'*50}\nSystem: {system_message}\nUser: {human_message}\nAI: {ai_message}\nUser: {message}")
         # prompt = self.pipe.tokenizer.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         output = self.pipe(self.messages, max_new_tokens=max_tokens, temperature=temperature)
-        # print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
+        print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
         return output[0]['generated_text']
