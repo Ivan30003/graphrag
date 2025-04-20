@@ -52,6 +52,16 @@ STATE = {}
 def process_query(prompt):
     query_entities = extract_query_entities(prompt.strip('\n').replace('?',''))
     print(f"{query_entities=}")
+    found_triples = STATE['graph'].search(query_entities)
+    print(f"\n{found_triples=}\n\n")
+    answer_str = 'Found triples:\n'
+    for ind, triples in enumerate(found_triples):
+        shift = ' ' * ind
+        print(triples)
+        answer_str += f'\n{shift}'.join([str(triple) for triple in triples])
+
+    return answer_str
+    
     
 
 def extract_doc_info(doc_save_path):
@@ -83,19 +93,30 @@ def processing_phrases(phrase):
 
 def extract_query_entities(query):
     llm = STATE['llm']
-
+    named_entity_json = {"named_entities": []}
     prompt_constructor = STATE['pipeline'].components[1].task_split_prompt_constructor
     prompt = prompt_constructor.get_task_split_prompt(task="triple", split_type='sentence')
-    ner_messages = prompt.get_prompt().format_prompt(user_input=query, )
 
-    chat_completion = llm.invoke(ner_messages.to_messages(), temperature=0)
-    response_content = chat_completion[4]['content']   # .content
+    openie_messages = prompt.get_prompt().format_prompt(passage=query, 
+                                                            named_entity_json=json.dumps(named_entity_json))
+
+    chat_completion = llm.invoke(openie_messages.to_messages(), temperature=0, max_tokens=4096)
+    response_content = chat_completion[4]['content']  # .content
     response_content = extract_json_dict(response_content)
 
-    if 'named_entities' not in response_content:
-        response_content = []
-    else:
-        response_content = response_content['named_entities']
+
+    # prompt_constructor = STATE['pipeline'].components[1].task_split_prompt_constructor
+    # prompt = prompt_constructor.get_task_split_prompt(task="triple", split_type='sentence')
+    # ner_messages = prompt.get_prompt().format_prompt(user_input=query, )
+
+    # chat_completion = llm.invoke(ner_messages.to_messages(), temperature=0)
+    # response_content = chat_completion[4]['content']   # .content
+    # response_content = extract_json_dict(response_content)
+
+    # if 'named_entities' not in response_content:
+    #     response_content = []
+    # else:
+    #     response_content = response_content['named_entities']
     
     # query_ner_prompts = ChatPromptTemplate.from_messages([SystemMessage("You're a very effective entity extraction system."),
     #                                                       HumanMessage(query_prompt_one_shot_input),
@@ -107,10 +128,16 @@ def extract_query_entities(query):
     # response_content = chat_completion[4]['content']   # .content
     # response_content = extract_json_dict(response_content)
     response_content = str(response_content)
-    query_ner_list = eval(response_content)['named_entities']
-    query_ner_list = [processing_phrases(p) for p in query_ner_list]
+    triples = eval(response_content)['triples']
+    # query_ner_list = [processing_phrases(p) for p in query_ner_list]
+    query_entities = set()
+    for triple in triples:
+        entities = [triple[0], triple[2]]
+        for entity in entities:
+            if "text" not in entity.lower():
+                query_entities.add(entity.lower())
 
-    return query_ner_list
+    return query_entities
 
 
 def preprocess_file(text):
