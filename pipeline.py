@@ -2,12 +2,13 @@
 from processors_utils.processing_utils import DatasetProcessor
 from extractor_utils.triples_entities_extraction import Extractor
 from processors_utils.processing_utils import BaseProcessor
+from processors_utils.processing_utils import LinkMerger
 
 
 COMPONENT_CLASSES_DICT = {"dataset_processor": DatasetProcessor,
                           "extractor": Extractor,
                           "base_processor": BaseProcessor,
-#                           "attributes_merger": AttributeMerger
+                          "link_merger": LinkMerger
                           }
 
 
@@ -25,5 +26,7 @@ class Pipeline:
             self.components.append(component)
 
     def launch(self):
+        print(f"LAUNCH PIPELINE")
         for component in self.components:
+            print(f"COMPONENT IN WORK: {component.component_name}")
             component()

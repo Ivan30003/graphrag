@@ -64,6 +64,6 @@ if __name__ == '__main__':
     #                     }
 
     # output_json_path = f'{output_path}openie_results_{arg_str}.json'
-    write_json_file(extra_info_json, output_json_path)
+    print("END")
     # avg_ent_chars = np.mean([len(e) for e in all_entities])
     # avg_ent_words = np.mean([len(e.split()) for e in all_entities])

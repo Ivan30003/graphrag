@@ -5,7 +5,13 @@ import os
 from pathlib import Path
 from typing import Union
 import csv
+from collections import defaultdict
+from numpy.linalg import norm
+from copy import deepcopy
+from nltk.corpus import stopwords
 
+from class_triples_entities import Triple
+from models_utils.embedding_model import EmbeddingModel
 from component import Component
 
 SPEC_STR = '%^&'
@@ -82,46 +88,20 @@ class DatasetProcessor(Component):
         elif self.split_type == 'sentence':
             text_sentences = []
             for text_fragment in documents:
-                if len(text_fragment.split(' ')) > 2:
-                    text_sentences.extend(text_fragment['passage'].split('.'))
+                if len(text_fragment['passage'].split(' ')) > 2:  # if text paragraph is not too short
+                    text_sentences.extend(text_fragment['passage'].strip('.').split('.'))
             
             cur_sentences_list = []
             for sentence in text_sentences:
-                if len(sentence.split(' ')) > 2:
+                if len(sentence.split(' ')) > 2: # if sentence not too short
                     cur_sentences_list.append(text_fragment['passage'].strip())
                     if len(cur_sentences_list) == self.amount:
                         divided_text.append({'idx': idx, 'passage': '\n'.join(cur_sentences_list)})
                         cur_sentences_list = []
                         idx += 1
                 else:
-                    print(f"WARNING! Fragment too short")
-        # if type(documents) == dict:
-        #     return documents
-        # elif type(documents) == list:
-            
-
-        #     if self.split_type == 'sentence':
-        #         dividing_by_list = ['\n', '.']
-        #     elif self.split_type == 'paragraph':
-        #         dividing_by_list = ['\n']
-
-        #     for divider_char in dividing_by_list:
-        #         documents = [document.strip('\n').replace(divider_char, SPEC_STR) for document in documents]
-
-        #     for document in documents:
-        #         divided_text.extend(document.split(SPEC_STR))
-
-        #     texts_list = []
-
-        #     index = 0
-        #     for text_fragment in divided_text:
-        #         if len(text_fragment) > 2:
-        #             texts_list.append({"idx": index, "passage": text_fragment.strip()})
-        #             index += 1
-        #     # texts_list = [ for ind, text_fragment in enumerate(divided_text)]
-
-        # else:
-        #     raise ValueError()
+                    print(f"WARNING! Fragment \"{sentence}\" too short")
+        
         self.write_statistics(f"Splitted dataset length: {len(divided_text)}")
         return divided_text
 
@@ -134,10 +114,11 @@ class DatasetProcessor(Component):
 
 class BaseProcessor(Component):
     def __init__(self, component_name: str, log: bool, working_dir: Path, 
-                 input_file: Path, output_files: list) -> None:
+                 input_file: Path, stop_word_remove, output_files: list) -> None:
         super().__init__(component_name, log, working_dir)
         self.input_file_path = Path(input_file)
         self.output_files = output_files
+        self.stop_word_remove = stop_word_remove
 
     def read_raw_triples_entities(self):
         reading_path = os.path.join(self.working_dir, self.input_file_path)
@@ -152,19 +133,22 @@ class BaseProcessor(Component):
         all_triples = []
         damaged_logs = []
         logs_dict = {}
-        for extracted_sample in extracted_entities_triples:
+        for extracted_sample in tqdm(extracted_entities_triples):
             cur_entities = extracted_sample['extracted_entities']
             cur_triples = extracted_sample['extracted_triples']
             cur_passage = extracted_sample['text_fragment']
+            cur_idx = extracted_sample['idx']
             full_triples, damaged_triples = self.filter_triples_by_integrity(cur_triples)
             full_entities, damaged_entities = self.filter_entities_by_integrity(cur_entities)
             if len(damaged_entities) > 0 or len(damaged_triples) > 0:
                 damaged_logs.append(f"Text: {cur_passage}\ntriples: {damaged_triples}\nentities: {damaged_entities}\n\n")
-            all_entities.extend(full_entities)
-            all_triples.extend(full_triples)
+            all_entities.extend([entity for entity in full_entities])
+            all_triples.extend([Triple(*triple, cur_idx) for triple in full_triples])
 
         logs_dict['Damaged triples entities'] = damaged_logs
-        all_triples = [tuple(triple) for triple in all_triples]
+        
+        if self.stop_word_remove:
+            self.remove_stop_words(all_triples, logs_dict)
         
         all_entities = self.remove_non_unique(all_entities, logs_dict, 'entities')
         all_triples = self.remove_non_unique(all_triples, logs_dict, 'triples')
@@ -222,8 +206,8 @@ class BaseProcessor(Component):
     def check_entities_triples_united(self, all_entities, all_triples):
         entities_from_triples = []
         for triple in all_triples:
-            entities_from_triples.append(triple[0])
-            entities_from_triples.append(triple[2])
+            entities_from_triples.append(triple.first_entity)
+            entities_from_triples.append(triple.second_entity)
 
         unique_triples_entities = list(set(entities_from_triples))
 
@@ -235,7 +219,18 @@ class BaseProcessor(Component):
         return [f'this elements from entities are not presented in triples: {not_presented_in_triples_str}\n'
                 f'this elements from triples are not presented in entities: {not_presented_in_entities_str}\n']
 
-    def write_result(self, all_entities, all_triples):
+    def remove_stop_words(self, all_triples: list[Triple], logs):
+        counter_removes = 0
+        for triple in all_triples:
+            new_linkage_str = ' '.join([word for word in triple.linkage.split(' ') if 
+                                        word not in stopwords.words('english')])
+            if len(new_linkage_str) > 0:
+                triple.linkage = new_linkage_str
+                counter_removes += 1
+
+        logs['stop words removing statistics'] = f"Removed stop words in {counter_removes} triples linkages from {len(all_triples)}"
+
+    def write_result(self, all_entities, all_triples: list[Triple]):
         entities_writing_path = os.path.join(self.working_dir, Path(self.output_files[0]))
         with open(entities_writing_path, 'w', newline='') as file:
             writer = csv.writer(file)
@@ -246,32 +241,113 @@ class BaseProcessor(Component):
         with open(triples_writing_path, 'w', newline='') as file:
             writer = csv.writer(file)
             for triple in all_triples:
-                writer.writerow(triple)
+                csv_triple = [triple.first_entity, triple.linkage, triple.second_entity, triple.text_idx]
+                writer.writerow(csv_triple)
 
-
-        # entities_triples_list = [all_entities, all_triples]
-        # for index, file_name in enumerate(self.output_files):
-        #     writing_path = os.path.join(self.working_dir, Path(file_name))
-        #     with open(writing_path, 'w', newline='') as file:
-        #         writer = csv.writer(file)
-        #         for element in entities_triples_list[index]:
-        #             writer.writerow([element])
         print('Processed triples and entities are saved to ', self.working_dir)
 
 
-def add_embeddings_to_triples_linkage(all_triples, embedding_model):
-    triples_linkage_embedding = []
-    for triple in tqdm(all_triples):
-        cur_linkage = triple[1]
-        embedding = embedding_model(cur_linkage)[0]
-        triples_linkage_embedding.append(embedding)
+class LinkMerger(Component):
+    def __init__(self, component_name: str, embedding_model_path: str, log: bool, working_dir: Path, 
+                 input_file: Path, sim_threshold: float, output_file: Path, depth: int) -> None:
+        super().__init__(component_name, log, working_dir)
+        self.input_file_path = Path(input_file)
+        self.output_files = output_file
+        self.threshold_sim = sim_threshold
+        self.embedding_model = EmbeddingModel(embedding_model_path)
+        self.cos_sim = lambda a,b: (a @ b.T) / (norm(a)*norm(b))
+        self.depth = depth
 
-    return triples_linkage_embedding
+    def read_processed_triples(self):
+        reading_path = os.path.join(self.working_dir, self.input_file_path)
+        data = []
+        with open(reading_path, 'r') as file:
+            csv_reader = csv.reader(file)
+            for row in csv_reader:
+                for ind in range(len(row)):
+                    row[ind] = row[ind].lower()
+                data.append(row)
+        return data
+
+    def __call__(self) -> None:
+        all_triples = self.read_processed_triples()
+        all_links_embeddings = self.add_embeddings_to_triples_linkage(all_triples)
+        merged_triples, merged_triples_stats = self.merging_linkages(all_triples, all_links_embeddings)
+        linkages_before_merge = set([triple[1] for triple in all_triples])
+        # print(all_triples[0][1], type(all_triples[0][1]))
+        # print(merged_triples[0][1], type(merged_triples[0][1]))
+        # print(merged_triples)
+        linkages_after_merge = set([triple[1] for triple in merged_triples])
+        merged_triples_stats['length changes'] = f"before merging: {len(linkages_before_merge)} | after merging: {len(linkages_after_merge)}"
+        self.write_statistics(merged_triples_stats)
+        self.write_result(merged_triples)
 
 
-def merging_linkages(triples_and_embeddings, threshold=0.8):
-    for index_one in range(len(triples_and_embeddings)):
-        for index_second in range(index_one+1, len(triples_and_embeddings)):
-            first_triple_linkage = triples_and_embeddings[index_one][1]
-            second_triple_linkage = triples_and_embeddings[index_second][1]
-            first_vector = triples_and_embeddings[index_one][1]
+    def add_embeddings_to_triples_linkage(self, all_triples):
+        triples_linkages = [triple[1].strip().strip("'") for triple in all_triples]
+        all_triples_embedding = self.embedding_model(triples_linkages)
+
+        return all_triples_embedding
+
+    def merging_linkages(self, all_triples, all_links_embeddings):
+        EXCLUDING_LIST = ["was", "was a", "was an", "is", "is a", "is an", "were", "are", ]
+        merged_triples_stats = {"merged_triples": dict()}
+        sim_link_dict = defaultdict(list)
+        for index_one in tqdm(range(len(all_links_embeddings))):
+            first_triple_linkage = all_triples[index_one][1]
+            if first_triple_linkage in EXCLUDING_LIST:
+                continue
+            for index_second in range(index_one+1, len(all_links_embeddings)):
+                second_triple_linkage = all_triples[index_second][1]
+                first_vector = all_links_embeddings[index_one]
+                second_vector = all_links_embeddings[index_second]
+                if self.cos_sim(first_vector, second_vector) > self.threshold_sim:
+                    # print(f"SIMILAR: {all_triples[index_one][1]} | {all_triples[index_second][1]}")
+                    sim_link_dict[index_one].append(index_second)
+
+        # for key in sim_link_dict:
+        #     print(f"KEY: {key}")
+        #     for element in sim_link_dict[key]:
+        #         print(f"    {element}")
+        # cur_links = list(sim_link_dict.keys())
+        # center_united_links = defaultdict(list)
+        searched_links = set()
+        merged_triples = deepcopy(all_triples)
+        for key in sim_link_dict:
+            # if key in searched_links:
+            #     continue
+            main_link = merged_triples[key][1]
+            merged_triples_stats['merged_triples'][main_link] = []
+            for index in sim_link_dict[key]:
+                if key in searched_links:
+                    continue
+                merged_triples_stats['merged_triples'][main_link].append(merged_triples[index][1])
+                merged_triples[index][1] = main_link  # replace linkage with similar one
+                searched_links.add(index)
+
+        return merged_triples, merged_triples_stats
+
+
+        # for cur_depth in range(self.depth):
+        #     all_cur_depth_triples = []
+        #     for entity in cur_entities:
+        #         if entity in searched_entities:
+        #             continue
+        #         searched_entities.add(entity)
+        #         cur_entity_triples = sim_link_dict.get(entity)
+        #         if cur_entity_triples is None:
+        #             print(f"for key: {entity} not found any")
+        #             continue
+        #         else:
+        #             all_cur_depth_triples.extend(cur_entity_triples)
+        #     found_triples.append(all_cur_depth_triples)
+
+
+    def write_result(self, triples: list):
+        triples_writing_path = os.path.join(self.working_dir, Path(self.output_files))
+        with open(triples_writing_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            for triple in triples:
+                writer.writerow(triple)
+
+        print('Processed triples and entities are saved to ', self.working_dir)
