@@ -3,13 +3,14 @@ from processors_utils.processing_utils import DatasetProcessor
 from extractor_utils.triples_entities_extraction import Extractor
 from processors_utils.processing_utils import BaseProcessor
 from processors_utils.processing_utils import LinkMerger
+from processors_utils.rule_based_hierarchy import HierarchyModule
 
 
 COMPONENT_CLASSES_DICT = {"dataset_processor": DatasetProcessor,
                           "extractor": Extractor,
                           "base_processor": BaseProcessor,
-                          "link_merger": LinkMerger
-                          }
+                          "link_merger": LinkMerger,
+                          "hierarchy_module": HierarchyModule}
 
 
 class Pipeline:
