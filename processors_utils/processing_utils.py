@@ -350,4 +350,4 @@ class LinkMerger(Component):
             for triple in triples:
                 writer.writerow(triple)
 
-        print('Processed triples and entities are saved to ', self.working_dir)
+        print('Merged triples are saved to ', self.working_dir)
