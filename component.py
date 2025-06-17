@@ -1,3 +1,7 @@
+import os
+from pathlib import Path
+
+
 class Component:
     def __init__(self, component_name, log, working_dir) -> None:
         self.component_name = component_name
@@ -21,5 +25,6 @@ class Component:
         else:
             data_str = f"{data_str}\n{str(data)}"
         
-        with open(f"log_{self.component_name}.txt", mode="w") as log_file:
+        save_path = os.path.join(Path(self.working_dir), Path(f"log_{self.component_name}.txt"))
+        with open(save_path, mode="w") as log_file:
             log_file.write(data_str)
