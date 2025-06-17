@@ -25,6 +25,10 @@ def init_langchain_model(llm: str, model_name: str, temperature: float = 0.0, ma
             model = LLM_Phi_35(model_name)
         elif 't5' in str(model_name).lower():
             model = LLM_T5(model_name)
+        elif 'qwen' in str(model_name).lower():
+            model = LLM_Qwen_3(model_name)
+        else:
+            raise NotImplementedError()
         return model
 
 
@@ -52,11 +56,46 @@ class LLM_Phi_35:
             tokenizer=tokenizer,
         )
 
-        self.generation_args = {
-            "max_new_tokens": 1000,
-            "return_full_text": False,
-            "temperature": 0.0,
-        }
+    def invoke(self, openie_messages: ChatPromptTemplate, temperature=0.0, max_tokens=3096, task='ner'):
+        system_message = openie_messages[0].content
+        human_message = openie_messages[1].content
+        ai_message = openie_messages[2].content
+        message = openie_messages[3].content
+
+        self.messages[0]['content'] = system_message
+        self.messages[1]['content'] = human_message
+        self.messages[2]['content'] = ai_message
+        self.messages[3]['content'] = message
+
+        # print(f"\n\n{'*'*50}\nSystem: {system_message}\nUser: {human_message}\nAI: {ai_message}\nUser: {message}")
+        # prompt = self.pipe.tokenizer.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        output = self.pipe(self.messages, max_new_tokens=max_tokens, temperature=temperature)
+        # print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
+        return output[0]['generated_text']
+    
+
+class LLM_Qwen_3:
+    def __init__(self, model_name_or_path) -> None:
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            torch_dtype="auto",
+            device_map="auto"
+        )
+
+        self.messages = [
+            {"role": "system", "content": "You are a helpful AI assistant."},
+            {"role": "user", "content": ""},
+            {"role": "assistant", "content": ""},
+            {"role": "user", "content": ""},
+        ]
+
+        # self.pipe = pipeline(
+        #     "text-generation",
+        #     model=model,
+        #     device="cuda",
+        #     tokenizer=tokenizer,
+        # )
 
     def invoke(self, openie_messages: ChatPromptTemplate, temperature=0.0, max_tokens=3096, task='ner'):
         system_message = openie_messages[0].content
@@ -71,10 +110,35 @@ class LLM_Phi_35:
 
         print(f"\n\n{'*'*50}\nSystem: {system_message}\nUser: {human_message}\nAI: {ai_message}\nUser: {message}")
         # prompt = self.pipe.tokenizer.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        output = self.pipe(self.messages, max_new_tokens=max_tokens, temperature=temperature)
-        print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
-        return output[0]['generated_text']
-    
+        # output = self.pipe(self.messages, max_new_tokens=max_tokens, temperature=temperature)
+        text = self.tokenizer.apply_chat_template(
+            self.messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False # Switches between thinking and non-thinking modes. Default is True.
+        )
+        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+        generated_ids = self.model.generate(
+            **model_inputs,
+            max_new_tokens=32768
+        )
+        output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
+
+        try:
+            # rindex finding 151668 (</think>)
+            index = len(output_ids) - output_ids[::-1].index(151668)
+        except ValueError:
+            index = 0
+
+        # thinking_content = self.tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
+        content = self.tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
+
+        # print("thinking content:", thinking_content)
+        # print("content:", content)
+
+        # print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
+        return [ None, None, None, None, {'content': content}]
+
 
 class LLM_T5:
     def __init__(self, model_name_or_path) -> None:
