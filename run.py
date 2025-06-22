@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import os
 
 # from processing_utils import (dataset_process, base_process_entities_triples, 
 # add_embeddings_to_triples_linkage, merging_linkages)
@@ -27,6 +28,7 @@ if __name__ == '__main__':
     # arg_str = dataset_path.stem
     print("START")
     config = read_yaml_file(config_path)
+    os.makedirs(config['working_dir'], exist_ok=True)
     pipeline = Pipeline(config)
     pipeline.launch()
 

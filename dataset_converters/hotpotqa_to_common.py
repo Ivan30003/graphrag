@@ -24,12 +24,16 @@ if __name__ == '__main__':
         if len(questions) == num_questions:
             break
         question = sample['question']
-        questions.append(question)
+        
+        texts_index_list = []
         for context_text in sample['context']:
             cur_context = ' '.join(context_text[1])
             reorganized_sample = {"idx": index, "passage": cur_context}
             retrieval_corpus.append(reorganized_sample)
+            texts_index_list.append(index)
             index += 1
+        question_full_info = {"_id": sample["_id"], "question": question, "ref_paragraphs": texts_index_list}
+        questions.append(question_full_info)
     
     print(f"{len(questions)} questions")
     print(f"{len(retrieval_corpus)} paragraphs")
@@ -41,4 +45,4 @@ if __name__ == '__main__':
         corpus = json.dump(retrieval_corpus, output_file, indent=4)
     output_file_path = os.path.join(Path(output_folder_path), Path(f"{set_name}_questions_{num_questions}.json"))
     with open(output_file_path, 'w') as output_file:
-        corpus = json.dump(retrieval_corpus, output_file, indent=4)
+        corpus = json.dump(questions, output_file, indent=4)

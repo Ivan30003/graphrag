@@ -37,7 +37,7 @@ class LLM_Phi_35:
         model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path,  # /media/hdd/models/text/Phi-3.5-mini-instruct/
             torch_dtype=torch.float16, 
-            trust_remote_code=True,
+            trust_remote_code=False,
             attn_implementation="eager"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
@@ -69,7 +69,10 @@ class LLM_Phi_35:
 
         # print(f"\n\n{'*'*50}\nSystem: {system_message}\nUser: {human_message}\nAI: {ai_message}\nUser: {message}")
         # prompt = self.pipe.tokenizer.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        output = self.pipe(self.messages, max_new_tokens=max_tokens, temperature=temperature)
+        if temperature == 0.0:
+            output = self.pipe(self.messages, max_new_tokens=max_tokens)
+        else:
+            output = self.pipe(self.messages, max_new_tokens=max_tokens, do_sample=True, temperature=temperature)
         # print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
         return output[0]['generated_text']
     
