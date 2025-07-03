@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 
 from models_utils.llm import LLM_Phi_35, LLM_Qwen_3, LLM_T5
-from graph_utils.graph_process import GraphConstructor
+from graph_utils.graph_process import GraphConstructor, Graph
 from models_utils.prompts_utils import TaskSplitPromptConstructor
 from extractor_utils.triples_entities_extraction import Extractor
 
@@ -32,6 +32,26 @@ Question: {}
 """
 
 
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+SYSTEM_PROMPT_QA = "You're thorough assistant responding to questions, based on retrieved context"
+USER_PROMPT_TEMPLATE_QA = """
+Goal:
+1) Provide clear and accurate response: carefully review and verify the retrieved data, and integrate any relevant necessary knowledge to comprehensively address user's question.
+2) Do not fabricate information: if you are unsure of answer just say so.
+3) Do not include details, not supported by the provided evidence
+4) Place your short answer to the question after words "{answer_key_word}"
+
+Context:
+{context}
+
+User's question:
+{question}
+"""
+KEY_WORD = "So the answer is:"
+
+
 def extract_json_dict(text):
         pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\})*)*\})*)*\}'
         match = re.search(pattern, text)
@@ -46,35 +66,6 @@ def extract_json_dict(text):
                 return ''
         else:
             return ''
-
-# def process_query(prompt):
-#     query_entities = extract_query_entities(prompt.strip('\n').replace('?',''))
-#     print(f"{query_entities=}")
-#     found_triples = STATE['graph'].search(query_entities)
-#     print(f"\n{found_triples=}\n\n")
-#     answer_str = 'Found triples:\n'
-#     for ind, triples in enumerate(found_triples):
-#         shift = ' ' * ind
-#         print(triples)
-#         answer_str += f'\n{shift}'.join([str(triple) for triple in triples])
-
-#     return answer_str
-
-
-# def extract_json_dict(text):
-#         pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\})*)*\})*)*\}'
-#         match = re.search(pattern, text)
-
-#         if match:
-#             json_string = match.group()
-#             try:
-#                 json_dict = json.loads(json_string)
-#                 return json_dict
-#             except json.JSONDecodeError as err:
-#                 print(f"{err}")
-#                 return ''
-#         else:
-#             return ''
         
 
 def processing_phrases(phrase):
@@ -105,16 +96,16 @@ def extract_query_entities(query, llm, prompt_constructor):
     return query_entities
 
 
-def get_answers(llm, questions_data: list, graph):
-    named_entity_json = {"named_entities": []}
-    prompt_constructor = TaskSplitPromptConstructor()
-    prompt = prompt_constructor.get_task_split_prompt(task="triple", split_type='sentence')
+def get_answers(llm, questions_data: list, graph: Graph):
+    # named_entity_json = {"named_entities": []}
+    # prompt_constructor = TaskSplitPromptConstructor()
+    # prompt = prompt_constructor.get_task_split_prompt(task="triple", split_type='sentence')
 
     answers = {}
     supporting_facts = {}
     for question_info in tqdm(questions_data):
         question = question_info['question']
-        question_id = question_info['_id']
+        question_id = question_info['id']
 
         query_ner_messages = ChatPromptTemplate.from_messages([SystemMessage(SYSTEM_PROMPT),
                                                           HumanMessage(ONE_SHOT_INPUT_PROMPT),
@@ -122,9 +113,9 @@ def get_answers(llm, questions_data: list, graph):
                                                           HumanMessage(USER_PROMPT_TEMPLATE.format(question))])
         # prompt = self.task_split_prompt_constructor.get_task_split_prompt(task="entity", split_type=self.split_type)
         # ner_messages = prompt.get_prompt().format_prompt(user_input=passage)
-        #query_ner_messages = query_ner_prompts.format_prompt()
+        # query_ner_messages = query_ner_prompts.format_prompt()
         chat_completion = llm.invoke(query_ner_messages, max_tokens=1536, task='ner')
-        response_content = chat_completion[4]['content']   # .content
+        response_content = chat_completion[-1]['content']   # .content
         response_content = extract_json_dict(response_content)
 
         if 'named_entities' not in response_content:
@@ -138,17 +129,32 @@ def get_answers(llm, questions_data: list, graph):
         #     query_entities = extract_query_entities(prompt.strip('\n').replace('?',''))
 
         # Search on graph required entities
-        print("\n"+str(query_entities))
+        # print("\n"+str(query_entities))
         if len(query_entities) == 0 or type(query_entities) != list or type(query_entities[0]) != str:
-            answer_str = "failed"
+            short_answer = ""
+            flat_found_triples = []
         else:
             query_entities = [processing_phrases(p) for p in query_entities]
             found_triples = graph.search(query_entities)
-            answer_str = f'Found triples:\n{found_triples[:10]}'
-        #print(f"{question}\n{found_triples=}")
-        answers[question_id] = answer_str
-        supporting_facts[question_id] = []
+            flat_found_triples = [triple for triples in found_triples for triple in triples]
+            context_str = "\n".join([', '.join(triple[:3]) for triple in flat_found_triples])
+            context_str = f'Context:\n{context_str}'
+            query_ner_messages = ChatPromptTemplate.from_messages([SystemMessage(SYSTEM_PROMPT_QA),
+                                                          HumanMessage(USER_PROMPT_TEMPLATE_QA.format(
+                                                              context=context_str, question=question, 
+                                                              answer_key_word=KEY_WORD))])
+            answer_chat_completion = llm.invoke(query_ner_messages, max_tokens=1536, task='ner')
+            answer_str = answer_chat_completion[-1]['content']   # .content
+            answer_start_index = answer_str.find(KEY_WORD)
+            if answer_start_index != -1:
+                short_answer = answer_str[answer_start_index+len(KEY_WORD):]
+            else:
+                short_answer = ""
 
+        # print(f"{question}\n{context_str=}")
+        answers[question_id] = short_answer
+        supporting_facts[question_id] = flat_found_triples
+        
     return {"answer": answers, "sp": supporting_facts}
 
 
@@ -190,7 +196,7 @@ def main():
 
     predictions = get_answers(llm, questions_data, graph)
 
-    output_file_path = os.path.join(Path(working_dir), Path("test_qwen_fullwiki_pred.json"))
+    output_file_path = os.path.join(Path(working_dir), Path("qwen_fullwiki_pred.json"))
     with open(output_file_path, mode='w') as output_file:
         json.dump(predictions, output_file)
 
