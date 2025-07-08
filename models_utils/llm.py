@@ -101,21 +101,14 @@ class LLM_Qwen_3:
         # )
 
     def invoke(self, openie_messages: ChatPromptTemplate, temperature=0.0, max_tokens=3096, task='ner'):
-        system_message = openie_messages[0].content
-        human_message = openie_messages[1].content
-        ai_message = openie_messages[2].content
-        message = openie_messages[3].content
+        messages_length = len(openie_messages)
+        assert messages_length in [2, 4]
+        # messages_template = self.messages[:messages_length]
+        for ind in range(messages_length):
+            self.messages[ind]['content'] = openie_messages[ind].content
 
-        self.messages[0]['content'] = system_message
-        self.messages[1]['content'] = human_message
-        self.messages[2]['content'] = ai_message
-        self.messages[3]['content'] = message
-
-        print(f"\n\n{'*'*50}\nSystem: {system_message}\nUser: {human_message}\nAI: {ai_message}\nUser: {message}")
-        # prompt = self.pipe.tokenizer.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        # output = self.pipe(self.messages, max_new_tokens=max_tokens, temperature=temperature)
         text = self.tokenizer.apply_chat_template(
-            self.messages,
+            self.messages[:messages_length],
             tokenize=False,
             add_generation_prompt=True,
             enable_thinking=False # Switches between thinking and non-thinking modes. Default is True.
@@ -123,7 +116,7 @@ class LLM_Qwen_3:
         model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
         generated_ids = self.model.generate(
             **model_inputs,
-            max_new_tokens=32768
+            max_new_tokens=max_tokens
         )
         output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
 
@@ -133,11 +126,7 @@ class LLM_Qwen_3:
         except ValueError:
             index = 0
 
-        # thinking_content = self.tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
         content = self.tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
-
-        # print("thinking content:", thinking_content)
-        # print("content:", content)
 
         # print(f"ANSWER:\n{output[0]['generated_text'][4]['content']}")
         return [ None, None, None, None, {'content': content}]
