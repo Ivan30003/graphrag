@@ -10,11 +10,12 @@ from numpy.linalg import norm
 from copy import deepcopy
 from nltk.corpus import stopwords
 
-from class_triples_entities import Triple
+from class_triples_entities import Triple, ExpandTriple
 from models_utils.embedding_model import EmbeddingModel
 from component import Component
 
 SPEC_STR = '%^&'
+MAX_ENTITY_LENGTH = 8
 
 class DatasetProcessor(Component):
     def __init__(self, dataset_path: Path, component_name: str, split_type: str, amount: int, 
@@ -29,17 +30,6 @@ class DatasetProcessor(Component):
     def __call__(self) -> dict:
         raw_data = self.read_dataset()
         splitted_texts_list = self.text_splitter(raw_data)
-        dataset_name = self.dataset_path.stem
-
-        # unified_corpus = [{'idx': i, 'passage': splitted_texts_dict[key]} for i, key in enumerate(splitted_texts_dict)]
-        # if 'hotpotqa' in dataset_name:
-        #     keys = list(splitted_texts_dict.keys())
-        #     unified_corpus = [{'idx': i, 'passage': key + '\n' + ''.join(splitted_texts_dict[key])} 
-        #                         for i, key in enumerate(keys)]
-        # else:
-        #     unified_corpus = splitted_texts_dict['data']
-        #     for document in unified_corpus:
-        #         document['passage'] = document.get('title', '') + '\n' + document['text']
         
         if self.num_passages == 'all':
             self.num_passages = len(splitted_texts_list)
@@ -67,7 +57,8 @@ class DatasetProcessor(Component):
                     data = json.load(opened_file)
                 else:
                     raise ValueError(f"Unknown extension {file_extension}")
-        self.write_statistics(f"amount of docs: {len(data)}")
+        if self.is_log:
+            self.write_statistics(f"amount of docs: {len(data)}")
     
         return data
 
@@ -102,7 +93,8 @@ class DatasetProcessor(Component):
                 else:
                     print(f"WARNING! Fragment \"{sentence}\" too short")
         
-        self.write_statistics(f"Splitted dataset length: {len(divided_text)}")
+        if self.is_log:
+            self.write_statistics(f"Splitted dataset length: {len(divided_text)}")
         return divided_text
 
     def write_result(self, processed_passages):
@@ -131,48 +123,50 @@ class BaseProcessor(Component):
         extracted_entities_triples = self.read_raw_triples_entities()
         all_entities = []
         all_triples = []
-        damaged_logs = []
-        logs_dict = {}
+        all_damaged_triples = []
+        all_damaged_entities = []
         for extracted_sample in tqdm(extracted_entities_triples):
             cur_entities = extracted_sample['extracted_entities']
             cur_triples = extracted_sample['extracted_triples']
-            cur_passage = extracted_sample['text_fragment']
             cur_idx = extracted_sample['idx']
             full_triples, damaged_triples = self.filter_triples_by_integrity(cur_triples)
             full_entities, damaged_entities = self.filter_entities_by_integrity(cur_entities)
-            if len(damaged_entities) > 0 or len(damaged_triples) > 0:
-                damaged_logs.append(f"Text: {cur_passage}\ntriples: {damaged_triples}\nentities: {damaged_entities}\n\n")
             all_entities.extend([entity for entity in full_entities])
             all_triples.extend([Triple(*triple, cur_idx) for triple in full_triples])
+            all_damaged_entities.extend([entity for entity in damaged_entities])
+            all_damaged_triples.extend([ExpandTriple(triple, cur_idx) for triple in damaged_triples])
 
-        logs_dict['Damaged triples entities'] = damaged_logs
+        # logs_dict['Damaged triples count'] = f"{100*damaged_triples_count/len(all_triples)}% of damaged triples"
+        # logs_dict['Damaged entities count'] = f"{100*damaged_entities_count/len(all_entities)}% of damaged entities"
+        # logs_dict['All damaged triples entities'] = damaged_logs
         
         if self.stop_word_remove:
-            self.remove_stop_words(all_triples, logs_dict)
+            self.remove_stop_words(all_triples)
         
-        all_entities = self.remove_non_unique(all_entities, logs_dict, 'entities')
-        all_triples = self.remove_non_unique(all_triples, logs_dict, 'triples')
+        all_entities = self.remove_non_unique(all_entities, 'entities')
+        all_triples = self.remove_non_unique(all_triples, 'triples')
 
         # print(f"{all_entities=}\n\n{all_triples=}")
-        logs_dict['Entities triples proporation'] = self.check_entities_triples_united(all_entities, all_triples)
-        self.write_statistics(logs_dict)
+        # logs_dict['Entities triples proporation'] = self.check_entities_triples_united(all_entities, all_triples)
+        # self.write_statistics(logs_dict)
         
-        self.write_result(all_entities, all_triples)
+        self.write_result(all_entities, all_triples, all_damaged_entities, all_damaged_triples)
 
-    def remove_non_unique(self, list_of_entities_or_triples, logs_dict, things_name):
+    def remove_non_unique(self, list_of_entities_or_triples, things_name):
         original_length = len(list_of_entities_or_triples)
-        # print(f"{list_of_entities_or_triples=}")
         filtered_list_of_entities_or_triples = list(set(list_of_entities_or_triples))
         new_length = len(filtered_list_of_entities_or_triples)
-        logs_dict[f'After only unique {things_name} left'] = \
-        f"Count is changed from {original_length} to {new_length}\n"
+        logs_dict = {f'After only unique {things_name} left': \
+        f"Count is changed from {original_length} to {new_length}\n"}
+        if self.is_log:
+            self.write_statistics(logs_dict)
         return filtered_list_of_entities_or_triples
 
     def check_one_triple(self, triple):
         if len(triple) != 3: 
             return False
         for entity in triple:
-            if entity == '' or type(entity) != str: 
+            if entity == '' or type(entity) != str or len(entity.split(" ")) > MAX_ENTITY_LENGTH: 
                 return False
         
         return True
@@ -181,7 +175,7 @@ class BaseProcessor(Component):
         full_triples = []
         damaged_triples = []
         if triples == "":
-            damaged_triples.append("")
+            damaged_triples.append([""])
             return full_triples, damaged_triples
         for triple in triples['triples']:
             is_full = self.check_one_triple(triple)
@@ -196,28 +190,12 @@ class BaseProcessor(Component):
         damaged_entities = []
 
         for entity in entities:
-            if type(entity) != str or len(entity.split(' ')) > 6:
+            if type(entity) != str or len(entity.split(' ')) > MAX_ENTITY_LENGTH:
                 damaged_entities.append(entity)
             else:
                 full_entities.append(entity)
 
         return full_entities, damaged_entities
-
-    def check_entities_triples_united(self, all_entities, all_triples):
-        entities_from_triples = []
-        for triple in all_triples:
-            entities_from_triples.append(triple.first_entity)
-            entities_from_triples.append(triple.second_entity)
-
-        unique_triples_entities = list(set(entities_from_triples))
-
-        not_presented_in_triples = [f'\"{item}\"' for item in all_entities if item not in unique_triples_entities]
-        not_presented_in_entities = [f'\"{item}\"' for item in unique_triples_entities if item not in all_entities]
-
-        not_presented_in_triples_str = ', '.join(not_presented_in_triples)
-        not_presented_in_entities_str = ', '.join(not_presented_in_entities)
-        return [f'this elements from entities are not presented in triples: {not_presented_in_triples_str}\n'
-                f'this elements from triples are not presented in entities: {not_presented_in_entities_str}\n']
 
     def remove_stop_words(self, all_triples: list[Triple], logs):
         counter_removes = 0
@@ -230,19 +208,28 @@ class BaseProcessor(Component):
 
         logs['stop words removing statistics'] = f"Removed stop words in {counter_removes} triples linkages from {len(all_triples)}"
 
-    def write_result(self, all_entities, all_triples: list[Triple]):
-        entities_writing_path = os.path.join(self.working_dir, Path(self.output_files[0]))
-        with open(entities_writing_path, 'w', newline='') as file:
+    def save_entities(self, entities, path):
+        with open(path, 'w', newline='') as file:
             writer = csv.writer(file)
-            for element in all_entities:
+            for element in entities:
                 writer.writerow([element])
 
-        triples_writing_path = os.path.join(self.working_dir, Path(self.output_files[1]))
-        with open(triples_writing_path, 'w', newline='') as file:
+    def save_triples(self, triples: list[Triple], path):
+        with open(path, 'w', newline='') as file:
             writer = csv.writer(file)
-            for triple in all_triples:
-                csv_triple = [triple.first_entity, triple.linkage, triple.second_entity, triple.text_idx]
+            for triple in triples:
+                csv_triple = triple.table_represent
                 writer.writerow(csv_triple)
+
+    def write_result(self, all_entities, all_triples: list[Triple], damaged_entities, damaged_triples: list[ExpandTriple]):
+        entities_writing_path = os.path.join(self.working_dir, Path(self.output_files[0]))
+        triples_writing_path = os.path.join(self.working_dir, Path(self.output_files[1]))
+        self.save_entities(all_entities, entities_writing_path)
+        self.save_triples(all_triples, triples_writing_path)
+        entities_writing_path = os.path.join(self.working_dir, Path(self.output_files[2]))
+        triples_writing_path = os.path.join(self.working_dir, Path(self.output_files[3]))
+        self.save_entities(damaged_entities, entities_writing_path)
+        self.save_triples(damaged_triples, triples_writing_path)
 
         print('Processed triples and entities are saved to ', self.working_dir)
 
