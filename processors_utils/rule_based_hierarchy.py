@@ -87,4 +87,4 @@ class HierarchyModule(Component):
             for triple in triples:
                 writer.writerow(triple)
 
-        print('Merged triples are saved to ', self.working_dir)
+        print('Enriched triples are saved to ', self.working_dir)
