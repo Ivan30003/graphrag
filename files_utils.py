@@ -16,6 +16,11 @@ def read_csv_file(file_path):
             data.append(row)
     return data
 
+def read_json(file_path):
+    with open(file_path, mode='r') as input_file:
+        data = json.load(input_file)
+
+    return data
 
 def write_json_file(json_data, output_path):
     json.dump(json_data, open(output_path, 'w'), indent=4)
