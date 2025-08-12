@@ -71,7 +71,7 @@ class HierarchyModule(Component):
         count = 0
         parents_dict = defaultdict(list)
         for triple in triples:
-            if triple[1] in ['is', 'are']:
+            if triple[1] in ['is', 'is a', 'are', 'work as', "works as"]:
                 count += 1
                 parents_dict[triple[2]].append(triple[0])
             if triple[1] in ['includes', 'include']:
