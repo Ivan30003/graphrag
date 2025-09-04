@@ -15,6 +15,10 @@ from models_utils.prompts_utils import TaskSplitPromptConstructor
 from extractor_utils.triples_entities_extraction import Extractor
 
 
+SYMBOL_COUNT_LIMIT = 16000
+ATTEMPTS = 3
+
+
 SYSTEM_PROMPT = "You're a very effective entity extraction system."
 ONE_SHOT_INPUT_PROMPT = """Please extract all named entities that are important for solving the questions below.
 Place the named entities in json format.
@@ -96,16 +100,29 @@ def extract_query_entities(query, llm, prompt_constructor):
     return query_entities
 
 
-def get_answers(llm, questions_data: list, graph: Graph):
+def get_context_str_from_triples(flat_found_triples):
+    context_str = "\n".join([', '.join(triple[:3]) for triple in flat_found_triples])
+    if len(context_str) > SYMBOL_COUNT_LIMIT:
+        print(f"TOO LONG CONTEXT - {len(context_str)}. Shortening in half")
+        return get_context_str_from_triples(flat_found_triples[:len(flat_found_triples)//2])
+    else:
+        return context_str
+
+
+def get_answers_questions_samples(llm, questions_data: list, graph: Graph):
     # named_entity_json = {"named_entities": []}
     # prompt_constructor = TaskSplitPromptConstructor()
     # prompt = prompt_constructor.get_task_split_prompt(task="triple", split_type='sentence')
 
-    answers = {}
-    supporting_facts = {}
+    # answers = {}
+    # supporting_facts = {}
+    questions_answers_samples = []
     for question_info in tqdm(questions_data):
-        question = question_info['question']
-        question_id = question_info['id']
+        for entity in ['question', 'query']:
+            question = question_info.get(entity)
+        if not question:
+            raise ValueError(f"{question_info=}")
+        # question_id = question_info['id']
 
         query_ner_messages = ChatPromptTemplate.from_messages([SystemMessage(SYSTEM_PROMPT),
                                                           HumanMessage(ONE_SHOT_INPUT_PROMPT),
@@ -114,7 +131,16 @@ def get_answers(llm, questions_data: list, graph: Graph):
         # prompt = self.task_split_prompt_constructor.get_task_split_prompt(task="entity", split_type=self.split_type)
         # ner_messages = prompt.get_prompt().format_prompt(user_input=passage)
         # query_ner_messages = query_ner_prompts.format_prompt()
-        chat_completion = llm.invoke(query_ner_messages, max_tokens=1536, task='ner')
+        chat_completion = ''
+        temperature = 0.0
+        for attempt in range(ATTEMPTS):
+            try:
+                chat_completion = llm.invoke(query_ner_messages, max_tokens=1024, task='ner', temperature=temperature)
+                break
+            except Exception as err:
+                print(f"ERROR: {err}\nTRYING again")
+                temperature += 0.2
+
         response_content = chat_completion[-1]['content']   # .content
         response_content = extract_json_dict(response_content)
 
@@ -137,7 +163,8 @@ def get_answers(llm, questions_data: list, graph: Graph):
             query_entities = [processing_phrases(p) for p in query_entities]
             found_triples = graph.search(query_entities)
             flat_found_triples = [triple for triples in found_triples for triple in triples]
-            context_str = "\n".join([', '.join(triple[:3]) for triple in flat_found_triples])
+            
+            context_str = get_context_str_from_triples(flat_found_triples)
             context_str = f'Context:\n{context_str}'
             query_ner_messages = ChatPromptTemplate.from_messages([SystemMessage(SYSTEM_PROMPT_QA),
                                                           HumanMessage(USER_PROMPT_TEMPLATE_QA.format(
@@ -152,10 +179,12 @@ def get_answers(llm, questions_data: list, graph: Graph):
                 short_answer = ""
 
         # print(f"{question}\n{context_str=}")
-        answers[question_id] = short_answer
-        supporting_facts[question_id] = flat_found_triples
+
+        questions_answers_samples.append({"question": question, "answer": short_answer, "evidence": flat_found_triples})
+        # answers[question_id] = short_answer
+        # supporting_facts[question_id] = flat_found_triples
         
-    return {"answer": answers, "sp": supporting_facts}
+    return questions_answers_samples
 
 
 def main():
@@ -163,11 +192,13 @@ def main():
     parser.add_argument('--working_dir', type=Path, required=True)
     parser.add_argument('--llm_path', type=Path, required=True)
     parser.add_argument('--questions_path', type=Path, required=True)
+    parser.add_argument('--benchmark_name', type=str, choices=['hotPotQA', 'multiHopRAG'], required=True)
 
     args = parser.parse_args()
     working_dir = args.working_dir
     llm_path = args.llm_path
     questions_path = args.questions_path
+    benchmark_name = args.benchmark_name
 
     with open(questions_path, mode='r') as input_file:
         questions_data = json.load(input_file)
@@ -194,9 +225,9 @@ def main():
     graph_constructor = GraphConstructor("graph_constructor", True, working_dir)
     graph = graph_constructor(triples)
 
-    predictions = get_answers(llm, questions_data, graph)
+    predictions = get_answers_questions_samples(llm, questions_data, graph)
 
-    output_file_path = os.path.join(Path(working_dir), Path("qwen_fullwiki_pred.json"))
+    output_file_path = os.path.join(Path(working_dir), Path(f"{benchmark_name}_raw_preds.json"))
     with open(output_file_path, mode='w') as output_file:
         json.dump(predictions, output_file)
 
