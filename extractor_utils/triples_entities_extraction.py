@@ -48,9 +48,9 @@ class Extractor(Component):
         if len(save_files) > 0:
             saved_extracted_triples_entities, start_index = self.load_save(save_files)
 
-        extracted_triples_entities = self.extract_openie(processed_texts, start_index)
-        saved_extracted_triples_entities.extend(extracted_triples_entities)
-        self.write_result(saved_extracted_triples_entities)
+        extracted_triples_entities = self.extract_openie(saved_extracted_triples_entities, processed_texts, start_index)
+        # saved_extracted_triples_entities.extend(extracted_triples_entities)
+        self.write_result(extracted_triples_entities)
 
     def read_processed_passages(self):
         reading_path = os.path.join(self.working_dir, self.input_file)
@@ -114,7 +114,7 @@ class Extractor(Component):
         return response_content
 
 
-    def extract_openie(self, texts_list, start_index=0): # client, split_type, task_split_prompt_constructor
+    def extract_openie(self, saved_extracted_triples_entities: list, texts_list, start_index=0): # client, split_type, task_split_prompt_constructor
         extracted_entities_triples = []
         chatgpt_total_tokens = 0
 
@@ -144,9 +144,10 @@ class Extractor(Component):
             # saving
             if self.save_each_steps != 0:
                 if len(extracted_entities_triples) % self.save_each_steps == 0:
-                    self.write_result(extracted_entities_triples, ready=False)
+                    # saved_extracted_triples_entities.extend(extracted_entities_triples)
+                    self.write_result(saved_extracted_triples_entities + extracted_entities_triples, ready=False)
 
-        return extracted_entities_triples
+        return saved_extracted_triples_entities + extracted_entities_triples
 
     def extract_json_dict(self, text):
         pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\})*)*\})*)*\}'

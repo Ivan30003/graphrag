@@ -25,7 +25,7 @@ class ExpandTriple:
             self.content_list = content_list
 
         self.text_idx = text_idx
-        self.table_represent = content_list + [self.text_idx]
+        self.table_represent = self.content_list + [self.text_idx]
 
     def __eq__(self, other):
         return self.first_entity == other.first_entity and self.linkage == other.linkage and \
