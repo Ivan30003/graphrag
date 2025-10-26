@@ -131,7 +131,7 @@ def get_answers_questions_samples(llm, questions_data: list, graph: Graph):
         # prompt = self.task_split_prompt_constructor.get_task_split_prompt(task="entity", split_type=self.split_type)
         # ner_messages = prompt.get_prompt().format_prompt(user_input=passage)
         # query_ner_messages = query_ner_prompts.format_prompt()
-        chat_completion = ''
+        chat_completion = [{"content": ""}]
         temperature = 0.0
         for attempt in range(ATTEMPTS):
             try:
@@ -170,7 +170,15 @@ def get_answers_questions_samples(llm, questions_data: list, graph: Graph):
                                                           HumanMessage(USER_PROMPT_TEMPLATE_QA.format(
                                                               context=context_str, question=question, 
                                                               answer_key_word=KEY_WORD))])
-            answer_chat_completion = llm.invoke(query_ner_messages, max_tokens=1536, task='ner')
+            try:
+                answer_chat_completion = llm.invoke(query_ner_messages, max_tokens=1536, task='ner')
+            except Exception as err:
+                print(f"ERROR: {err}\nTRYING AGAIN")
+                try:
+                    answer_chat_completion = llm.invoke(query_ner_messages, max_tokens=1536, task='ner')
+                except:
+                    print(f"ERROR: {err}\nFAILED")
+                    answer_chat_completion = [{"content": ""}]
             answer_str = answer_chat_completion[-1]['content']   # .content
             answer_start_index = answer_str.find(KEY_WORD)
             if answer_start_index != -1:
@@ -192,6 +200,7 @@ def main():
     parser.add_argument('--working_dir', type=Path, required=True)
     parser.add_argument('--llm_path', type=Path, required=True)
     parser.add_argument('--questions_path', type=Path, required=True)
+    parser.add_argument('--use_enriched_triples', action="store_true")
     parser.add_argument('--benchmark_name', type=str, choices=['hotPotQA', 'multiHopRAG'], required=True)
 
     args = parser.parse_args()
@@ -199,11 +208,15 @@ def main():
     llm_path = args.llm_path
     questions_path = args.questions_path
     benchmark_name = args.benchmark_name
+    use_enriched_triples = args.use_enriched_triples
 
     with open(questions_path, mode='r') as input_file:
         questions_data = json.load(input_file)
 
-    triples_file_path = os.path.join(Path(working_dir), Path("all_triples.csv"))
+    if use_enriched_triples:
+        triples_file_path = os.path.join(Path(working_dir), Path("enriched_triples.csv"))
+    else:
+        triples_file_path = os.path.join(Path(working_dir), Path("all_triples.csv"))
     triples = []
     with open(triples_file_path, 'r') as file:
         csv_reader = csv.reader(file)
@@ -226,8 +239,12 @@ def main():
     graph = graph_constructor(triples)
 
     predictions = get_answers_questions_samples(llm, questions_data, graph)
-
-    output_file_path = os.path.join(Path(working_dir), Path(f"{benchmark_name}_raw_preds.json"))
+    llm_name = str(Path(llm_path).stem)
+    if use_enriched_triples:
+        output_file_name = Path(f"{benchmark_name}_{llm_name}_with_HM_raw_preds.json")
+    else:
+        output_file_name = Path(f"{benchmark_name}_{llm_name}_raw_preds.json")
+    output_file_path = os.path.join(Path(working_dir), output_file_name)
     with open(output_file_path, mode='w') as output_file:
         json.dump(predictions, output_file)
 

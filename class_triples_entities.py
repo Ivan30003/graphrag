@@ -21,6 +21,8 @@ class ExpandTriple:
         self.length = 0
         if type(content_list) == str:
             self.content_list = [content_list]
+        elif type(content_list) == dict:
+            self.content_list = [content_list]
         else:
             self.content_list = content_list
 

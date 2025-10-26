@@ -8,9 +8,28 @@ def prepare_multi_hop_rag_preds(predictions, questions_dict):
     prepared_predictions = []
     for prediction_info in predictions:
         prepared_prediction = {}
-        prepared_prediction['model_answer'] = prediction_info['answer']
+        question_type = questions_dict[prediction_info['question']]
+        prediction = prediction_info['answer']
+        cleaned_prediction = ''
+
+        if len(prediction) > 0:
+            if question_type == 'inference_query':
+                cleaned_prediction = prediction.strip().strip('.')
+            elif question_type == 'comparison_query':  # '  No, the context says ...' -> 'No'
+                cleaned_prediction = prediction.strip().replace(',', '').replace('.', '').split()[0]
+            elif question_type == 'null_query':
+                if "unable to determine" in prediction.lower() or "cannot determine" in prediction.lower():
+                    cleaned_prediction = "Insufficient information"
+                else:
+                    cleaned_prediction = ''
+            elif question_type == 'temporal_query':
+                cleaned_prediction = prediction.strip().replace(',', '').replace('.', '').split()[0]
+            else:
+                raise ValueError(f"{question_type} Unknown")
+
+        prepared_prediction['model_answer'] = cleaned_prediction
         prepared_prediction['query'] = prediction_info['question']
-        prepared_prediction['question_type'] = questions_dict[prediction_info['question']]
+        prepared_prediction['question_type'] = question_type
         prepared_predictions.append(prepared_prediction)
 
     return prepared_predictions

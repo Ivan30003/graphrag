@@ -12,13 +12,11 @@ def prepare_corpus_dict(corpus: list):
         corpus_dict[title] = text
     return corpus_dict
 
-SYMBOL_COUNT_LIMIT = 2000
-
-def resplit_text_further(text: str):
+def resplit_text_further(text: str, symbols_limit: int):
     texts = []
     cur_text = ''
     for sub_text in text.split('.'):
-        if len(cur_text) + len(sub_text) <= SYMBOL_COUNT_LIMIT:
+        if len(cur_text) + len(sub_text) <= symbols_limit:
             cur_text += f"{sub_text}."
         else:
             texts.append(cur_text)
@@ -32,10 +30,12 @@ if __name__ == '__main__':
     parser.add_argument('--questions_json_path', type=Path)
     parser.add_argument('--num_questions', type=str)
     parser.add_argument('--output_folder_path', type=Path)
+    parser.add_argument('--symbols_limit', type=int, default=2000)
     args = parser.parse_args()
     corpus_json_path = args.corpus_json_path
     questions_json_path = args.questions_json_path
     output_folder_path = args.output_folder_path
+    symbols_limit = args.symbols_limit
 
     with open(corpus_json_path, 'r') as input_file:
         corpus = json.load(input_file)
@@ -69,7 +69,7 @@ if __name__ == '__main__':
                     continue
                 
                 # check if uniting with next fragment will not exceed limit
-                if len(resplitted_text) + len(sub_text) <= SYMBOL_COUNT_LIMIT:
+                if len(resplitted_text) + len(sub_text) <= symbols_limit:
                     resplitted_text += f"{sub_text}\n"
                 else:
                     index += 1
@@ -77,9 +77,9 @@ if __name__ == '__main__':
                                                 "passage": resplitted_text.strip()}
                     retrieval_corpus.append(reorganized_text_sample)
                     resplitted_text = ''
-                    if len(sub_text) > SYMBOL_COUNT_LIMIT: # single text eceeds limit
-                        print(f'WARNING! {len(sub_text)=} more than {SYMBOL_COUNT_LIMIT}')
-                        texts = resplit_text_further(sub_text)
+                    if len(sub_text) > symbols_limit: # single text eceeds limit
+                        print(f'WARNING! {len(sub_text)=} more than {symbols_limit}')
+                        texts = resplit_text_further(sub_text, symbols_limit)
                         reorganized_texts_samples = [{"id": cur_context_title, "index": index+sub_index, 
                                                 "passage": text} for sub_index, text in enumerate(texts)]
                         retrieval_corpus.extend(reorganized_texts_samples)

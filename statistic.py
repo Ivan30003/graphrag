@@ -48,22 +48,25 @@ class ExtractorStats:
             entities = sample['extracted_entities']
             entities_str = ' '.join(set(entities))
             entities_words = self.count_words_str(entities_str)
-            if type(sample['extracted_triples']) == dict:
+            if type(sample['extracted_triples']) == dict and 'triples' in sample['extracted_triples']:
                 triples = sample['extracted_triples']['triples']
             else:
                 triples = [[]]
-            triples_str = ' '.join([' '.join(triple).strip() for triple in triples])
-            triples_words = self.count_words_str(triples_str)
-            paragraph_words = self.count_words_str(sample['text_fragment'])
-            
-            # save total
-            total_entities += len(entities)
-            total_triples += len(triples)
-            total_entities_words += entities_words
-            total_triples_words += triples_words
-            total_paragraphs_words += paragraph_words
-            paragraph_entities_words_proportion_list.append(entities_words/paragraph_words)
-            paragraph_triples_words_proportion_list.append(triples_words/paragraph_words)
+            try:
+                triples_str = ' '.join([' '.join(triple).strip() for triple in triples])
+                triples_words = self.count_words_str(triples_str)
+                paragraph_words = self.count_words_str(sample['text_fragment'])
+                
+                # save total
+                total_entities += len(entities)
+                total_triples += len(triples)
+                total_entities_words += entities_words
+                total_triples_words += triples_words
+                total_paragraphs_words += paragraph_words
+                paragraph_entities_words_proportion_list.append(entities_words/paragraph_words)
+                paragraph_triples_words_proportion_list.append(triples_words/paragraph_words)
+            except Exception as err:
+                print(f"ERROR! {err}")
 
 
         total_entities_proportion = total_entities / total_paragraphs
@@ -110,11 +113,13 @@ class ExtractorStats:
         plt.ylabel("num paragraphs")
         plt.grid(True)
         if "entities" in x_label_add:
-            plt.xlim(0.0, 1.0)
-            plt.ylim(0, 180)
+            # plt.xlim(0.0, 1.0)
+            # plt.ylim(0, 180)
+            pass
         else:
             # plt.xlim(0.0, 6.0)
-            plt.ylim(0, 400)
+            # plt.ylim(0, 400)
+            pass
         writing_path = self.working_dir / Path(f"{x_label_add}_distribution.png")
         plt.savefig(writing_path)
         plt.close()
@@ -124,6 +129,20 @@ class BaseProcessorStats:
     def __init__(self, working_dir, output_file_names) -> None:
         self.working_dir = Path(working_dir)
         self.output_file_names = output_file_names  # [all_entities, all_triples, damaged_entities, damaged_triples]
+
+    def calculate_triples_entities_quality(self, all_triples):
+        total_entities_words_count = 0
+        for triple in all_triples:
+            entity_first = triple[0]
+            entity_second = triple[2]
+            entity_first_word_count = len([word for word in entity_first.split(' ') 
+                                           if word not in stopwords.words('english')])
+            entity_second_word_count = len([word for word in entity_second.split(' ') 
+                                            if word not in stopwords.words('english')])
+            total_entities_words_count += (entity_first_word_count + entity_second_word_count)
+        
+        return total_entities_words_count / (2*len(all_triples))
+
 
     def check_entities_triples_united(self, all_entities: list, all_triples: list[Triple]):
         entities_from_triples = []
@@ -158,24 +177,30 @@ class BaseProcessorStats:
     def __call__(self) -> None:
         all_entities, all_triples, damaged_entities, damaged_triples = self.read_input()
         converted_all_triples = [Triple(*triple[:3], triple[-1]) for triple in all_triples]
-        converted_all_entities = [entity[0] for entity in all_entities]
-        # extracted_entities_triples = read_json(self.working_dir / Path)
-
         damaged_triples_proportion = len(damaged_triples) / (len(converted_all_triples) + len(damaged_triples))
-        damaged_entities_proportion = len(damaged_entities) / (len(all_entities) + len(damaged_entities))
 
-        entities_presence_intersection_prop, triples_presence_intersection_prop, \
-        entities_own_entities_prop, entities_own_triples_prop = self.check_entities_triples_united(converted_all_entities, 
-                                                                                                   converted_all_triples)
-        
+        if len(all_entities) > 0:
+            converted_all_entities = [entity[0] for entity in all_entities]
+            damaged_entities_proportion = len(damaged_entities) / (len(all_entities) + len(damaged_entities))
+            entities_presence_intersection_prop, triples_presence_intersection_prop, \
+            entities_own_entities_prop, entities_own_triples_prop = self.check_entities_triples_united(converted_all_entities, 
+                                                                                                    converted_all_triples)
+        else:
+            damaged_entities_proportion = 0.0
+            entities_presence_intersection_prop = 0.0
+            triples_presence_intersection_prop = 0.0
+            entities_own_entities_prop = 0.0
+            entities_own_triples_prop = 0.0
+
+        mean_triples_entities_words_count =  self.calculate_triples_entities_quality(all_triples)
 
         self.write_statistics(damaged_triples_proportion, damaged_entities_proportion, 
                               entities_presence_intersection_prop, triples_presence_intersection_prop,
-                            entities_own_entities_prop, entities_own_triples_prop)
+                            entities_own_entities_prop, entities_own_triples_prop, mean_triples_entities_words_count)
 
     def write_statistics(self, damaged_triples_proportion, damaged_entities_proportion,
                          entities_presence_intersection_prop, triples_presence_intersection_prop,
-                            entities_own_entities_prop, entities_own_triples_prop):
+                            entities_own_entities_prop, entities_own_triples_prop, mean_triples_entities_words_count):
         writing_path = self.working_dir / Path("base_processor_statistics.csv")
         with open(writing_path, 'w', newline='') as file:
             writer = csv.writer(file)
@@ -184,10 +209,11 @@ class BaseProcessorStats:
                            "entities presented in intersection_proportion", 
                            "triples entities presented in intersection proportion",
                            "entities entities which are not in triples proportion",
-                           "triples entities which are not in entities proportion"]
+                           "triples entities which are not in entities proportion", 
+                           "mean words in entity in all triples"]
             values_row = [damaged_triples_proportion, damaged_entities_proportion, 
                           entities_presence_intersection_prop, triples_presence_intersection_prop,
-                          entities_own_entities_prop, entities_own_triples_prop]
+                          entities_own_entities_prop, entities_own_triples_prop, mean_triples_entities_words_count]
             for header, value in zip(headers_row, values_row):
                 writer.writerow([header, value])
 
