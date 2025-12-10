@@ -1,0 +1,30 @@
+working_dir: <path>/experiment
+debug: false
+pipeline:
+  parts:
+    dataset_processor:
+      dataset_path: <path>/converted/test_set.json
+      split_type: paragraph
+      amount: 1
+      num_passages: all
+      log: true
+      output_file: processed_texts.json
+    extractor:
+      input_file: processed_texts.json
+      separate_entities_extraction_step: false
+      llm_type: local
+      split_type: paragraph
+      llm_path: <path_to_model_dir>
+      log: true
+      save_each_steps: 200
+      simplier_pattern: false
+      output_file: extracted_entities_triples.json
+    base_processor:
+      input_file: extracted_entities_triples.json
+      log: true
+      stop_word_remove: False
+      output_files: [all_entities.csv, all_triples.csv, damaged_entities.csv, damaged_triples.csv]
+    hierarchy_module:
+      input_file: all_triples.csv
+      log: true
+      output_file: enriched_triples.csv
