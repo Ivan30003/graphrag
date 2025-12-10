@@ -5,17 +5,19 @@ import torch
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import set_seed
 
 
 MIN_JSON_LENGTH = 5
 
 
-def init_langchain_model(llm: str, model_name: str, temperature: float = 0.0, max_retries=5, timeout=60, **kwargs):
+def init_langchain_model(llm: str, model_name: str, temperature: float = 0.0, max_retries=5, timeout=60, seed=52, **kwargs):
     """
     Initialize a language model from the langchain library.
-    :param llm: The LLM to use, e.g., 'openai', 'together'
+    :param llm: The LLM to use, e.g., 'openai'
     :param model_name: The model name to use, e.g., 'gpt-3.5-turbo'
     """
+    set_seed(seed)
     if llm == 'openai':
         # https://python.langchain.com/v0.1/docs/integrations/chat/openai/
         assert model_name.startswith('gpt-')
@@ -94,9 +96,9 @@ class LLM_Qwen_3:
 
         self.messages = [
             {"role": "system", "content": "You are a helpful AI assistant."},
-            {"role": "user", "content": ""},
-            {"role": "assistant", "content": ""},
-            {"role": "user", "content": ""},
+            {"role": "user", "content": ""}
+            # {"role": "assistant", "content": ""},
+            # {"role": "user", "content": ""},
         ]
 
     def is_repeat(self, text: str):
@@ -110,16 +112,17 @@ class LLM_Qwen_3:
         return False
 
 
-    def invoke(self, openie_messages: ChatPromptTemplate, temperature=0.0, max_tokens=4096, task='ner'):
-        messages_length = len(openie_messages)
-        assert messages_length in [2, 4]
-        print(f"{'*'*70}\n{openie_messages}\n\n")
+    def invoke(self, prompt: str, temperature=0.0, max_tokens=4096, task='ner'):
+        # messages_length = len(openie_messages)
+        # assert messages_length in [2, 4]
+        print(f"{'*'*70}\n{prompt}\n\n")
         # messages_template = self.messages[:messages_length]
-        for ind in range(messages_length):
-            self.messages[ind]['content'] = openie_messages[ind].content
+        # for ind in range(messages_length):
+        #     self.messages[ind]['content'] = openie_messages[ind].content
+        self.messages[1]['content'] = prompt
 
         text = self.tokenizer.apply_chat_template(
-            self.messages[:messages_length],
+            self.messages,
             tokenize=False,
             add_generation_prompt=True,
             enable_thinking=False
@@ -144,8 +147,9 @@ class LLM_Qwen_3:
             else:
                 break
 
-        print(f"ANSWER:\n{[content]}\n\n\n")
-        return [ None, None, None, None, {'content': content}]
+        print(f"ANSWER:\n\n\n{content}\n\n\n")
+
+        return content
 
 
 class LLM_Granite_33:
