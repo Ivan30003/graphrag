@@ -14,8 +14,8 @@ from tqdm import tqdm
 from langchain_openai import ChatOpenAI
 
 from models_utils.prompts_utils import TaskSplitPromptConstructor
+from prompt_utils.prompt_manager import PromptManager
 from models_utils.llm import init_langchain_model
-# from models_utils.processing_utils import extract_json_dict, text_splitter, read_dataset
 from component import Component
 
 
@@ -25,12 +25,12 @@ SAVE_KEY_WORD = "_save_step_"  # extracted_entities_triples_save_step_500.json
 class Extractor(Component):
     def __init__(self, component_name: str, log: bool, working_dir: Path, llm_type: str, 
                  llm_path: Path, split_type: str, input_file: Path, output_file: Path, save_each_steps=0,
-                 simplier_pattern=False, separate_entities_extraction_step=False) -> None:
+                 simplier_pattern=False, separate_entities_extraction_step=False, seed=52) -> None:
         super().__init__(component_name, log, working_dir)
         self.llm_type = llm_type
         self.llm_path = Path(llm_path)
-        self.llm = init_langchain_model(llm_type, Path(llm_path))
-        self.task_split_prompt_constructor = TaskSplitPromptConstructor()
+        self.llm = init_langchain_model(llm_type, Path(llm_path), seed)
+        self.task_split_prompt_constructor = PromptManager("English") # TaskSplitPromptConstructor()
         self.split_type = split_type
         self.simplier_pattern = simplier_pattern
         self.save_each_steps = save_each_steps
@@ -96,25 +96,20 @@ class Extractor(Component):
         return response_content
 
     def openie_post_ner_extract(self, passage: str, entities: list):
-        if len(entities) > 0:
-            named_entity_json = {"named_entities": entities}
-            named_entity_json_str = json.dumps(named_entity_json)
-        else:
-            named_entity_json_str = ""
+        # if len(entities) > 0:
+        #     named_entity_json = {"named_entities": entities}
+        #     named_entity_json_str = json.dumps(named_entity_json)
+        # else:
+        #     named_entity_json_str = ""
 
-        prompt = self.task_split_prompt_constructor.get_task_split_prompt(task="triple", split_type=self.split_type)
+        prompt = self.task_split_prompt_constructor.text_decomposition  # get_task_split_prompt(task="triple", split_type=self.split_type)
 
-        openie_messages = prompt.get_prompt().format_prompt(passage=passage, 
-                                                            named_entity_json=named_entity_json_str)
-        # try:
-        if isinstance(self.llm, ChatOpenAI):  # JSON mode
-            chat_completion = self.llm.invoke(openie_messages.to_messages(), temperature=0, max_tokens=4096, response_format={"type": "json_object"})
-            response_content = chat_completion.content
-            total_tokens = chat_completion.response_metadata['token_usage']['total_tokens']
-        else:
-            chat_completion = self.llm.invoke(openie_messages.to_messages(), temperature=0, task="openie")
-            response_content = chat_completion[4]['content']  # .content
-            response_content = self.extract_json_dict(response_content)
+        # openie_messages = ChatPromptTemplate.from_messages([HumanMessage(prompt)]).format_prompt(text=passage)   # .get_prompt()
+        # # named_entity_json=named_entity_json_str)
+        # else:
+        chat_completion = self.llm.invoke(prompt.format(text=passage), temperature=0, task="openie")
+        response_content = chat_completion  # [4]['content']  # .content
+        response_content = self.extract_json_dict(response_content)
 
         return response_content
 
@@ -143,7 +138,7 @@ class Extractor(Component):
 
             extracted_entities = doc_entities
 
-            extracted_entities_triples.append({'idx': sample.get('index'), 'dataset_idx': sample.get('id'), 
+            extracted_entities_triples.append({'idx': sample.get('idx'), 'dataset_idx': sample.get('id'), 
                                                'text_fragment': passage, 
                                                 'extracted_entities': extracted_entities,
                                                 'extracted_triples': triples})

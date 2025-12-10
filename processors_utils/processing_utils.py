@@ -163,13 +163,17 @@ class BaseProcessor(Component):
         return filtered_list_of_entities_or_triples
 
     def check_one_triple(self, triple):
-        if len(triple) != 3: 
-            return False
-        for entity in triple:
-            if entity == '' or type(entity) != str or len(entity.split(" ")) > MAX_ENTITY_LENGTH: 
-                return False
+        if len(triple) != 3:
+            return False, f'Triple`s length is {len(triple)} not 3'
+        for ind, entity in enumerate(triple):
+            if entity == '':
+                return False, f"One of Entity is an empty string (index={ind})"
+            if type(entity) != str:
+                return False, f"Entity type is {type(entity)} not str (index={ind})"
+            if len(entity.split(" ")) > MAX_ENTITY_LENGTH:
+                return False, f"Entity length in words is {len(entity.split(" "))} is too high, (index={ind})"
         
-        return True
+        return True, ''
 
     def filter_triples_by_integrity(self, triples):
         full_triples = []
@@ -179,11 +183,11 @@ class BaseProcessor(Component):
             return full_triples, damaged_triples
         if 'triples' in triples:
             for triple in triples['triples']:
-                is_full = self.check_one_triple(triple)
+                is_full, damage_comment = self.check_one_triple(triple)
                 if is_full:
                     full_triples.append(triple)
                 else:
-                    damaged_triples.append(triple)
+                    damaged_triples.append(triple+[damage_comment])
         else:
             return full_triples, damaged_triples
         return full_triples, damaged_triples
