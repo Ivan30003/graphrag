@@ -6,7 +6,7 @@ class Component:
     def __init__(self, component_name, log, working_dir) -> None:
         self.component_name = component_name
         self.is_log = log
-        self.working_dir = working_dir
+        self.working_dir = Path(working_dir)
 
     def write_statistics(self, data):
         data_str = ""

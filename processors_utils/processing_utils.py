@@ -135,20 +135,12 @@ class BaseProcessor(Component):
             all_triples.extend([Triple(*triple, cur_idx) for triple in full_triples])
             all_damaged_entities.extend([entity for entity in damaged_entities])
             all_damaged_triples.extend([ExpandTriple(triple, cur_idx) for triple in damaged_triples])
-
-        # logs_dict['Damaged triples count'] = f"{100*damaged_triples_count/len(all_triples)}% of damaged triples"
-        # logs_dict['Damaged entities count'] = f"{100*damaged_entities_count/len(all_entities)}% of damaged entities"
-        # logs_dict['All damaged triples entities'] = damaged_logs
         
         if self.stop_word_remove:
             self.remove_stop_words(all_triples)
         
         all_entities = self.remove_non_unique(all_entities, 'entities')
         all_triples = self.remove_non_unique(all_triples, 'triples')
-
-        # print(f"{all_entities=}\n\n{all_triples=}")
-        # logs_dict['Entities triples proporation'] = self.check_entities_triples_united(all_entities, all_triples)
-        # self.write_statistics(logs_dict)
         
         self.write_result(all_entities, all_triples, all_damaged_entities, all_damaged_triples)
 
@@ -163,13 +155,17 @@ class BaseProcessor(Component):
         return filtered_list_of_entities_or_triples
 
     def check_one_triple(self, triple):
-        if len(triple) != 3: 
-            return False
-        for entity in triple:
-            if entity == '' or type(entity) != str or len(entity.split(" ")) > MAX_ENTITY_LENGTH: 
-                return False
+        if len(triple) != 3:
+            return False, f'Triple`s length is {len(triple)} not 3'
+        for ind, entity in enumerate(triple):
+            if entity == '':
+                return False, f"One of Entity is an empty string (index={ind})"
+            if type(entity) != str:
+                return False, f"Entity type is {type(entity)} not str (index={ind})"
+            if len(entity.split(" ")) > MAX_ENTITY_LENGTH:
+                return False, f"Entity length in words is {len(entity.split(" "))} is too high, (index={ind})"
         
-        return True
+        return True, ''
 
     def filter_triples_by_integrity(self, triples):
         full_triples = []
@@ -179,11 +175,11 @@ class BaseProcessor(Component):
             return full_triples, damaged_triples
         if 'triples' in triples:
             for triple in triples['triples']:
-                is_full = self.check_one_triple(triple)
+                is_full, damage_comment = self.check_one_triple(triple)
                 if is_full:
                     full_triples.append(triple)
                 else:
-                    damaged_triples.append(triple)
+                    damaged_triples.append(triple+[damage_comment])
         else:
             return full_triples, damaged_triples
         return full_triples, damaged_triples
@@ -264,9 +260,6 @@ class LinkMerger(Component):
         all_links_embeddings = self.add_embeddings_to_triples_linkage(all_triples)
         merged_triples, merged_triples_stats = self.merging_linkages(all_triples, all_links_embeddings)
         linkages_before_merge = set([triple[1] for triple in all_triples])
-        # print(all_triples[0][1], type(all_triples[0][1]))
-        # print(merged_triples[0][1], type(merged_triples[0][1]))
-        # print(merged_triples)
         linkages_after_merge = set([triple[1] for triple in merged_triples])
         merged_triples_stats['length changes'] = f"before merging: {len(linkages_before_merge)} | after merging: {len(linkages_after_merge)}"
         self.write_statistics(merged_triples_stats)
@@ -288,24 +281,15 @@ class LinkMerger(Component):
             if first_triple_linkage in EXCLUDING_LIST:
                 continue
             for index_second in range(index_one+1, len(all_links_embeddings)):
-                second_triple_linkage = all_triples[index_second][1]
+                # second_triple_linkage = all_triples[index_second][1]
                 first_vector = all_links_embeddings[index_one]
                 second_vector = all_links_embeddings[index_second]
                 if self.cos_sim(first_vector, second_vector) > self.threshold_sim:
-                    # print(f"SIMILAR: {all_triples[index_one][1]} | {all_triples[index_second][1]}")
                     sim_link_dict[index_one].append(index_second)
 
-        # for key in sim_link_dict:
-        #     print(f"KEY: {key}")
-        #     for element in sim_link_dict[key]:
-        #         print(f"    {element}")
-        # cur_links = list(sim_link_dict.keys())
-        # center_united_links = defaultdict(list)
         searched_links = set()
         merged_triples = deepcopy(all_triples)
         for key in sim_link_dict:
-            # if key in searched_links:
-            #     continue
             main_link = merged_triples[key][1]
             merged_triples_stats['merged_triples'][main_link] = []
             for index in sim_link_dict[key]:
@@ -316,21 +300,6 @@ class LinkMerger(Component):
                 searched_links.add(index)
 
         return merged_triples, merged_triples_stats
-
-
-        # for cur_depth in range(self.depth):
-        #     all_cur_depth_triples = []
-        #     for entity in cur_entities:
-        #         if entity in searched_entities:
-        #             continue
-        #         searched_entities.add(entity)
-        #         cur_entity_triples = sim_link_dict.get(entity)
-        #         if cur_entity_triples is None:
-        #             print(f"for key: {entity} not found any")
-        #             continue
-        #         else:
-        #             all_cur_depth_triples.extend(cur_entity_triples)
-        #     found_triples.append(all_cur_depth_triples)
 
 
     def write_result(self, triples: list):

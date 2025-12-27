@@ -5,17 +5,20 @@ import torch
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import set_seed
 
 
 MIN_JSON_LENGTH = 5
 
 
-def init_langchain_model(llm: str, model_name: str, temperature: float = 0.0, max_retries=5, timeout=60, **kwargs):
+def init_langchain_model(llm: str, model_name: str, temperature: float = 0.0, 
+                         max_retries=5, timeout=60, seed=52, **kwargs):
     """
     Initialize a language model from the langchain library.
     :param llm: The LLM to use, e.g., 'openai', 'together'
     :param model_name: The model name to use, e.g., 'gpt-3.5-turbo'
     """
+    set_seed(seed)
     if llm == 'openai':
         # https://python.langchain.com/v0.1/docs/integrations/chat/openai/
         assert model_name.startswith('gpt-')

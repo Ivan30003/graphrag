@@ -25,11 +25,11 @@ SAVE_KEY_WORD = "_save_step_"  # extracted_entities_triples_save_step_500.json
 class Extractor(Component):
     def __init__(self, component_name: str, log: bool, working_dir: Path, llm_type: str, 
                  llm_path: Path, split_type: str, input_file: Path, output_file: Path, save_each_steps=0,
-                 simplier_pattern=False, separate_entities_extraction_step=False) -> None:
+                 simplier_pattern=False, separate_entities_extraction_step=False, seed=52) -> None:
         super().__init__(component_name, log, working_dir)
         self.llm_type = llm_type
         self.llm_path = Path(llm_path)
-        self.llm = init_langchain_model(llm_type, Path(llm_path))
+        self.llm = init_langchain_model(llm_type, Path(llm_path), seed)
         self.task_split_prompt_constructor = TaskSplitPromptConstructor()
         self.split_type = split_type
         self.simplier_pattern = simplier_pattern
@@ -102,9 +102,9 @@ class Extractor(Component):
         else:
             named_entity_json_str = ""
 
-        prompt = self.task_split_prompt_constructor.get_task_split_prompt(task="triple", split_type=self.split_type)
+        prompt_constructor = self.task_split_prompt_constructor.get_task_split_prompt(task="triple", split_type=self.split_type)
 
-        openie_messages = prompt.get_prompt().format_prompt(passage=passage, 
+        openie_messages = prompt_constructor.get_prompt().format_prompt(passage=passage, 
                                                             named_entity_json=named_entity_json_str)
         # try:
         if isinstance(self.llm, ChatOpenAI):  # JSON mode
@@ -143,7 +143,7 @@ class Extractor(Component):
 
             extracted_entities = doc_entities
 
-            extracted_entities_triples.append({'idx': sample.get('index'), 'dataset_idx': sample.get('id'), 
+            extracted_entities_triples.append({'idx': sample.get('idx'), 'dataset_idx': sample.get('id'), 
                                                'text_fragment': passage, 
                                                 'extracted_entities': extracted_entities,
                                                 'extracted_triples': triples})
