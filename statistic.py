@@ -48,8 +48,8 @@ class ExtractorStats:
             entities = sample['extracted_entities']
             entities_str = ' '.join(set(entities))
             entities_words = self.count_words_str(entities_str)
-            if type(sample['extracted_triples']) == dict and 'triples' in sample['extracted_triples']:
-                triples = sample['extracted_triples']['triples']
+            if type(sample['extracted_triples']) == list:
+                triples = sample['extracted_triples']
             else:
                 triples = [[]]
             try:
@@ -219,9 +219,11 @@ class BaseProcessorStats:
 
 
 class HierarchyStats:
-    def __init__(self) -> None:
+    def __init__(self, working_dir, output_file_names) -> None:
         pass
-
+    
+    def __call__(self) -> None:
+        pass
 
 PARTS_STATS_DICT = {"dataset_processor": ParagraphStats, 
                     "extractor": ExtractorStats, 
