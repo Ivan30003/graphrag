@@ -2,16 +2,14 @@ import sys
 
 sys.path.append('.')
 
-#from langchain_community.chat_models import ChatOllama, ChatLlamaCpp
-
 import json
-# from glob import glob
 import re
 from pathlib import Path
 import os
 
 from tqdm import tqdm
 from langchain_openai import ChatOpenAI
+import timeout_decorator
 
 from models_utils.prompts_utils import TaskSplitPromptConstructor
 from models_utils.llm import init_langchain_model
@@ -20,21 +18,22 @@ from component import Component
 
 
 SAVE_KEY_WORD = "_save_step_"  # extracted_entities_triples_save_step_500.json
-
+MIN_JSON_LENGTH = 3
 
 class Extractor(Component):
     def __init__(self, component_name: str, log: bool, working_dir: Path, llm_type: str, 
                  llm_path: Path, split_type: str, input_file: Path, output_file: Path, save_each_steps=0,
-                 simplier_pattern=False, separate_entities_extraction_step=False, seed=52) -> None:
+                 simplier_pattern=False, separate_entities_extraction_step=False, seed=52, max_attempts=1) -> None:
         super().__init__(component_name, log, working_dir)
         self.llm_type = llm_type
         self.llm_path = Path(llm_path)
-        self.llm = init_langchain_model(llm_type, Path(llm_path), seed)
+        self.llm = init_langchain_model(llm_type, Path(llm_path), seed=seed)
         self.task_split_prompt_constructor = TaskSplitPromptConstructor()
         self.split_type = split_type
         self.simplier_pattern = simplier_pattern
         self.save_each_steps = save_each_steps
         self.separate_entities_extraction_step = separate_entities_extraction_step
+        self.max_attempts = max_attempts
         self.input_file = Path(input_file)
         self.output_file = Path(output_file)
 
@@ -71,27 +70,49 @@ class Extractor(Component):
         assert int(str(last_save_path).split('.')[-2].split('_')[-1]) == len(processed_entities_triples)
         return processed_entities_triples, len(processed_entities_triples)
 
+    def is_repeat(self, entities):
+        if type(entities) == dict:
+            if len(entities['triples']) < 3:
+                return False
+            for i in range(len(entities['triples'])-2):
+                first_triple_str = ' | '.join(entities['triples'][i])
+                second_triple_str = ' | '.join(entities['triples'][i+1])
+                third_triple_str = ' | '.join(entities['triples'][i+2])
+                if first_triple_str == second_triple_str:
+                    return True
+                if first_triple_str == third_triple_str:
+                    return True
+        elif type(entities) == list:
+            if len(entities) < 3:
+                return False
+            for i in range(len(entities)-2):
+                if entities[i] == entities[i+1] and entities[i+1] == entities[i+2]:
+                    return True
+        else:
+            raise ValueError(f"{type(entities)=}")
+        return False
+
     def named_entity_recognition(self, passage: str):
         prompt = self.task_split_prompt_constructor.get_task_split_prompt(task="entity", split_type=self.split_type)
         ner_messages = prompt.get_prompt().format_prompt(user_input=passage)
 
-        not_done = True
-
         total_tokens = 0
         response_content = '{}'
+        temperature = 0.0
 
-        while not_done:
-            # try:
-            chat_completion = self.llm.invoke(ner_messages.to_messages(), temperature=0, task="ner")
-            response_content = chat_completion[4]['content']   # .content
-            response_content = self.extract_json_dict(response_content)
-
-            if 'named_entities' not in response_content:
-                response_content = []
-            else:
+        for attempt in range(self.max_attempts):
+            chat_completion = self.llm.invoke(ner_messages.to_messages(), temperature=temperature, task="ner")
+            raw_response_content = chat_completion[4]['content']   # .content
+            try:
+                response_content = self.extract_json_dict(raw_response_content)
                 response_content = response_content['named_entities']
-
-            not_done = False
+                is_repeat = self.is_repeat(response_content)
+            except Exception as err:
+                print(f"ERROR: parsing problem: {err}")
+                response_content = []
+            if len(response_content) > 0 and not is_repeat:
+                break
+            temperature = 0.6
 
         return response_content
 
@@ -107,14 +128,24 @@ class Extractor(Component):
         openie_messages = prompt_constructor.get_prompt().format_prompt(passage=passage, 
                                                             named_entity_json=named_entity_json_str)
         # try:
-        if isinstance(self.llm, ChatOpenAI):  # JSON mode
-            chat_completion = self.llm.invoke(openie_messages.to_messages(), temperature=0, max_tokens=4096, response_format={"type": "json_object"})
-            response_content = chat_completion.content
-            total_tokens = chat_completion.response_metadata['token_usage']['total_tokens']
-        else:
-            chat_completion = self.llm.invoke(openie_messages.to_messages(), temperature=0, task="openie")
-            response_content = chat_completion[4]['content']  # .content
-            response_content = self.extract_json_dict(response_content)
+
+        temperature = 0.0
+
+        for attempt in range(self.max_attempts):
+            chat_completion = self.llm.invoke(openie_messages.to_messages(), temperature=temperature, task="ner")
+            raw_response_content = chat_completion[4]['content']   # .content
+            try:
+                response_content = self.extract_json_dict(raw_response_content)
+                response_content = response_content['triples']
+                is_repeat = self.is_repeat(response_content)
+            except Exception as err:
+                print(f"ERROR: {err}")
+                response_content = []
+            if len(response_content) > 0 and not is_repeat:
+                break
+            
+            temperature = 0.6
+            print(f"REPEAT")
 
         return response_content
 
@@ -122,7 +153,7 @@ class Extractor(Component):
     def extract_openie(self, saved_extracted_triples_entities: list, texts_list, start_index=0): # client, split_type, task_split_prompt_constructor
         extracted_entities_triples = []
         chatgpt_total_tokens = 0
-
+        index = 0
         for sample in tqdm(texts_list[start_index:]):
             passage = sample['passage']
             if len(passage) < 8:
@@ -138,8 +169,12 @@ class Extractor(Component):
             else:
                 doc_entities = []
             # print(f"Unique entities: {doc_entities}\n")
-
-            triples = self.openie_post_ner_extract(passage, doc_entities)
+            cur_index = start_index + index
+            if cur_index in [1147]:
+                print(f"{cur_index} - BAD SAMPLE:\n{passage}")
+                triples = []
+            else:
+                triples = self.openie_post_ner_extract(passage, doc_entities)
 
             extracted_entities = doc_entities
 
@@ -154,13 +189,15 @@ class Extractor(Component):
                     # saved_extracted_triples_entities.extend(extracted_entities_triples)
                     self.write_result(saved_extracted_triples_entities + extracted_entities_triples, ready=False)
 
+            index+=1
         return saved_extracted_triples_entities + extracted_entities_triples
 
+    @timeout_decorator.timeout(10)
     def extract_json_dict(self, text):
         if self.simplier_pattern:
             pattern = re.compile(r'(\{.*?\})')
         else:
-            pattern = r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\})*)*\})*)*\}'
+            pattern = re.compile(r'\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\})*)*\})*)*\}')
         match = re.search(pattern, text)
 
         if match:
@@ -169,7 +206,6 @@ class Extractor(Component):
                 json_dict = json.loads(json_string)
                 return json_dict
             except json.JSONDecodeError as err:
-                print(f"{err}")
                 return ''
         else:
             return ''
