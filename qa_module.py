@@ -139,7 +139,7 @@ def get_answers_questions_samples(llm, questions_data: list, graph: Graph):
                 break
             except Exception as err:
                 print(f"ERROR: {err}\nTRYING again")
-                temperature += 0.2
+                temperature = 0.8
 
         response_content = chat_completion[-1]['content']   # .content
         response_content = extract_json_dict(response_content)
