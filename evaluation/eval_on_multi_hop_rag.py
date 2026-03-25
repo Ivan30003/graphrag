@@ -1,33 +1,25 @@
 import json
 from tqdm import tqdm
 import re
-from collections import Counter
 import argparse
+from pathlib import Path
 
-# Read files
-with open('/home/person/projects/qa_with_kg/experiments/full_experiments/multiHopRag_q100_qwen_4b_copy/converted_qwen4b_qwen4b_predictions.json', 'r') as file:
-    doc_data = json.load(file)
 
-with open('/home/person/projects/qa_with_kg/datasets/converted/MultiHopRAG_questions_100.json', 'r') as file:
-    query_data = json.load(file)
-
-# Initialize dictionary to save lists of predictions and gold standards for each question_type
-type_data = {}
-overall_pred_list = []
-overall_gold_list = []
 
 # Function to get the correct answer
-def get_gold(query):
+def get_gold(query_data, query):
     for q in query_data:
         if q['query'] == query:
             return q['answer']
     return ''
+
 
 # Function to check if there is an intersection of words between two strings
 def has_intersection(a, b):
     a_words = set(a.split())
     b_words = set(b.split())
     return len(a_words.intersection(b_words)) > 0
+
 
 # Function to extract the answer
 def extract_answer(input_string):
@@ -65,12 +57,31 @@ def calculate_metrics(pred_list, gold_list):
 
 
 def main():
-    # Main loop, iterate through document data
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--converted_preds_path', type=Path, required=True)
+    parser.add_argument('--questions_path', type=Path, required=True)
+
+    args = parser.parse_args()
+    converted_preds_path = Path(args.converted_preds_path)
+    questions_path = Path(args.questions_path)
+
+    # Read files
+    with open(converted_preds_path, 'r') as file:
+        doc_data = json.load(file)
+
+    with open(questions_path, 'r') as file:
+        query_data = json.load(file)
+
+    # Initialize dictionary to save lists of predictions and gold standards for each question_type
+    type_data = {}
+    overall_pred_list = []
+    overall_gold_list = []
+        # Main loop, iterate through document data
     for d in tqdm(doc_data):
         model_answer = d['model_answer']
         if 'The answer' in model_answer:
             model_answer = extract_answer(model_answer)
-        gold = get_gold(d['query'])
+        gold = get_gold(query_data, d['query'])
         if gold:
             question_type = d['question_type']
             if question_type not in type_data:
@@ -84,18 +95,18 @@ def main():
     for question_type, data in type_data.items():
         precision, recall, f1, accuracy = calculate_metrics(data['pred_list'], data['gold_list'])
         print(f"Question Type: {question_type}")
-        print(f" Precision: {precision:.2f}")
-        print(f" Recall: {recall:.2f}")
-        print(f" F1 Score: {f1:.2f}")
-        print(f" accuracy: {accuracy:.2f}")
+        print(f" Precision: {precision:.3f}")
+        print(f" Recall: {recall:.3f}")
+        print(f" F1 Score: {f1:.3f}")
+        print(f" accuracy: {accuracy:.3f}")
 
     # Calculate overall evaluation metrics
     overall_precision, overall_recall, overall_f1, overall_accuracy = calculate_metrics(overall_pred_list, overall_gold_list)
     print(f"Overall Metrics:")
-    print(f" Precision: {overall_precision:.2f}")
-    print(f" Recall: {overall_recall:.2f}")
-    print(f" F1 Score: {overall_f1:.2f}")
-    print(f" Accuracy: {overall_accuracy:.2f}")
+    print(f" Precision: {overall_precision:.3f}")
+    print(f" Recall: {overall_recall:.3f}")
+    print(f" F1 Score: {overall_f1:.3f}")
+    print(f" Accuracy: {overall_accuracy:.3f}")
 
 
 if __name__ == '__main__':
