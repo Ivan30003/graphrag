@@ -5,12 +5,14 @@ from processors_utils.processing_utils import BaseProcessor
 from processors_utils.processing_utils import LinkMerger
 from processors_utils.rule_based_hierarchy import HierarchyModule
 from processors_utils.texts_embedder import TextsEmbedder
+from processors_utils.triples_reverser import TripleReverser
 
 
 COMPONENT_CLASSES_DICT = {"dataset_processor": DatasetProcessor,
                           "extractor": Extractor,
                           "text_vectorizer": TextsEmbedder,
                           "base_processor": BaseProcessor,
+                          "triple_reverser": TripleReverser,
                           "link_merger": LinkMerger,
                           "hierarchy_module": HierarchyModule}
 
