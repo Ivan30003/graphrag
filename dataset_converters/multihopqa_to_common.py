@@ -103,7 +103,7 @@ if __name__ == '__main__':
     num_questions = 'all' if num_questions == len(questions) else num_questions 
     output_file_path = os.path.join(Path(output_folder_path), Path(f"{filename}_corpus_{num_questions}.json"))
     with open(output_file_path, 'w') as output_file:
-        corpus = json.dump(retrieval_corpus, output_file, indent=4)
+        json.dump(retrieval_corpus, output_file, indent=4)
     output_file_path = os.path.join(Path(output_folder_path), Path(f"{filename}_questions_{num_questions}.json"))
     with open(output_file_path, 'w') as output_file:
-        corpus = json.dump(sampled_questions, output_file, indent=4)
+        json.dump(sampled_questions, output_file, indent=4)

@@ -9,12 +9,11 @@ from models_utils.embedding_model import EmbeddingModel
 class TextsEmbedder(Component):
     def __init__(self, component_name: str, log: bool, working_dir: Path, 
                  embedding_model_path: Path, batch_size: int,
-                 input_file: Path, output_file: str, seed: int) -> None:
+                 input_file: Path, output_file: str) -> None:
         super().__init__(component_name, log, working_dir)
         self.input_file_path = Path(input_file)
         self.embedding_model = EmbeddingModel(embedding_model_path, batch_size)
         self.batch_size = batch_size
-        self.seed = seed
         self.output_file = output_file
 
     def read_raw_triples_entities(self):

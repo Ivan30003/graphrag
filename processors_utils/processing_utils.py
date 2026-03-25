@@ -173,15 +173,16 @@ class BaseProcessor(Component):
         if triples == "":
             damaged_triples.append([""])
             return full_triples, damaged_triples
-        if 'triples' in triples:
-            for triple in triples['triples']:
+        else:  # if 'triples' in triples:
+            for triple in triples:
                 is_full, damage_comment = self.check_one_triple(triple)
                 if is_full:
                     full_triples.append(triple)
                 else:
-                    damaged_triples.append(triple+[damage_comment])
-        else:
-            return full_triples, damaged_triples
+                    if type(triple) == list:
+                        damaged_triples.append(triple+[damage_comment])
+                    else:
+                        damaged_triples.append([triple]+[damage_comment])
         return full_triples, damaged_triples
 
     def filter_entities_by_integrity(self, entities):
