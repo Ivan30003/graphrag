@@ -47,19 +47,19 @@ class GraphConstructor(Component):
             csv_reader = csv.reader(file)
             for row in csv_reader:
                 for ind in range(len(row)):
-                    row[ind] = row[ind]
+                    row[ind] = row[ind].lower()
                 data.append(row)
         return data
     
-    def __call__(self, triples=None) -> dict:
+    def __call__(self, triples=None) -> Graph:
         if not triples:
             triples = self.read_input()
         triples_dict = defaultdict(list)
         for triple in triples:
             first_entity = triple[0]
             second_entity = triple[2]
-            triples_dict[first_entity.lower()].append(triple)
-            triples_dict[second_entity.lower()].append(triple)
+            triples_dict[first_entity].append(triple)
+            triples_dict[second_entity].append(triple)
 
         return Graph(triples_dict)
     
