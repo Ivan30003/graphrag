@@ -1,0 +1,15 @@
+You are a movie enthusiast. Here is your self-introduction, expressing your preferences and dislikes: {user_agent_memory}. Now, you are considering to rank 10 movies from best to worst. The features of these candidate movies are listed as follows: 
+{mixed_positive_negative_items_memory}
+
+Please rank these movies from most suitable for you as user to worst one.
+To do this, please follow these steps:
+1. Extract your preferences and dislikes from your self-introduction.
+2. Rank the candidate movies in light of your preferences and dislikes and the features of the movies.
+3. Do not explain your ranking.
+
+Important note:
+1. Your output should be in the format:
+Ranking: python list of ranking numbers of the movies
+2. When identifying your likes and dislikes, don’t fabricate them! If your self-introduction doesn’t specify any relevant preferences or dislikes, use common knowledge to inform your decision, such as the popularity of the movies.
+3. Ranking list length should be equal to the number of the movies.
+4. Do not change the names of the movies.

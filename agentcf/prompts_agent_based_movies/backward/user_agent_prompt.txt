@@ -1,0 +1,20 @@
+You are a movie enthusiast.
+Here is your previous self-introduction, exhibiting your past preferences and dislikes: {user_agent_memory}. Recently, you considered to choose one movie from two candidates. The features of these two candidate movies are listed as follows:
+1. {neg_item_agent_memory}
+2. {pos_item_agent_memory}
+
+After comparing these two candidates based on your preferences and dislikes, you selected {neg_item_title} to listen to while rejected the other one. You provided the following explanations for your choice, revealing your previous judgment about your preferences and dislikes for these two movies: {user_explanation}. 
+However, upon actually listening to these two movies, you discovered that you don’t like the movie that you initially chose. Instead, you prefer the movie that you did not choose before.
+This indicates that you made an incorrect choice, and your judgment about your preferences and dislikes, as recorded in your explanation, was mistaken. It’s possible that your preferences and dislikes, described in your previous self-introduction, have either changed or were uninformative. Therefore, your task now is to update your self-introduction, by incorporating your new preferences and dislikes revealed in this interaction. To do this, please follow these steps: 
+1. Analyze the misconceptions in your previous judgment about your preferences and dislikes, as recorded in your explanation, and correct these mistakes
+2. Explore your new preferences based on the features of movies you really enjoy {pos_item_agent_memory}, and determine your dislikes based on the features of movies you truly don’t enjoy.
+3. Summarize your past preferences and dislikes from your previous self-introduction. Combine your newfound preferences and dislikes with your past preferences and dislikes. Filter and Remove any conflicting or repetitive parts in your past descriptions that contradict your current preferences and dislikes.
+4. Update your self-introduction. Please start by describing your newfound preferences reflected in this interaction. Then describe your past preferences summarized and filtered from your previous self-introduction. Afterward, please describe your dislikes.
+
+Important note:
+1. Your output should use the following format: 
+My updated self-introduction: [Please write your updated self-introduction here].
+2. Keep your updated self-introduction under 180 words.
+3. Any overall assessments or summarization in your self-introduction are forbidden.
+4. You updated self-introduction only need to describe the features of movies you prefer or dislike, without mentioning your wrong choice or your thinking process in updating your self-introduction.
+5. You self-introduction should be specific and personalized. Any preferences and dislikes that cannot distinguish you from others are not worth recording.

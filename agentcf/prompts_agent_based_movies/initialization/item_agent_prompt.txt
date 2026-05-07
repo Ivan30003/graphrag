@@ -1,0 +1,1 @@
+The movie is called "{product_name}". The genres of this movie are: "{product_category}"

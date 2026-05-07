@@ -1,0 +1,1 @@
+The CD is called "{product_name}". The category of this CD is: "{product_category}"

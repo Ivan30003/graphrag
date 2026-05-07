@@ -1,0 +1,23 @@
+Here is the self-introduction of a user, exhibiting his preferences and dislikes: {user_agent_memory}.
+Recently, the user browsed a shopping website and considered to choose one movie from two candidate movies.
+The descriptions of the two candidate movies are as follows:
+1.{pos_item_agent_memory}
+2.{neg_item_agent_memory}
+
+By considering his preferences and dislikes from his self-introduction, he chose {neg_item_title} to listen to while rejected the other one. He provided the following explanations for his choices: {user_explanation}.
+
+However, the user found that he actually doesn’t enjoy the movie that he previously chosen. Conversely, he finds the movie that he didn’t choose before, titled {pos_item_title}, more appealing. This indicates that he made an unsuitable choice. This may be because the user was misled by the descriptions of these two candidate movies.
+Actually, the user prefers a movie {pos_item_title} because its features aligns with his preferences and go against his dislikes, while he dislikes the other movie {neg_item_title} because it possesses features that he disliked. Therefore, your task is to update the descriptions of these two candidate movies.
+To do this, follow these steps:
+1. Analyze which features recorded in the previous movie description led to the unsuitable choice based on the user’s explanation, and modify them accordingly.
+2. Analyze the user’s preferences and dislikes from his self-introduction. Explore the user preferred movie’s new features that aligns with the user’s preferences and goes against with his dislikes. Explore the user disliked movie’s new features that aligns with the user’s dislikes and goes against with his preferences. In this case, the differences between the descriptions of these two items should be amplified. Your exploration should be thorough and detailed, rather than just superficial. For example, you can’t simply say a movie’s genre aligns with or goes against the user’s preferences, as that is too broad.
+3. Incorporate the item’s newfound features with the into its previous description. Since the previous descriptions of the candidate movies are based on evaluations from other users, it is also worth preserving valuable content. Please try to maintain conciseness while preserving the information as much as possible.
+
+Important notes:
+1. Your output should in the following format: 
+The updated description of the first movie is: [updated description].
+The updated description of the second movie is: [updated description].
+2. Each updated movie description can not exceed 50 words!!!
+3. In your updated movie description, considering that it will be visible to other users, it is advisable to utilize user preferences or dislikes when referring to a group of users collectively, rather than using "the user" to specifically denote an individual. For instance, you can mention "the user with ... preferences/dislikes".
+4. The updated movie description should not contradict the inherent characteristics of this movie. For example, you can not say that a hip-hop movie has a very soothing rhythm.
+5. The updated movie description should be specific, containing only the distinguishing features that differentiate this movie from others.
